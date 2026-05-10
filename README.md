@@ -35,7 +35,7 @@ orchestrator synthesizes → final markdown report with investment thesis and al
 ### 1. Clone the repository and install dependencies
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/therealcyberlord/Grove
 cd backend
 uv sync
 ```
