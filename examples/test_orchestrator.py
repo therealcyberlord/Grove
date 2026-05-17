@@ -5,7 +5,7 @@ import logging
 
 logging.basicConfig(level=logging.INFO, format="%(name)s %(levelname)s %(message)s")
 
-query = "Give me an in-depth analysis of Moderna and whether it is a buy"
+query = "What is the sentiment of Celsius?"
 
 async def main():
     print(f"Query: {query}\n{'='*60}\n")

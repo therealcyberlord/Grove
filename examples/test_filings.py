@@ -10,7 +10,14 @@ query = "Analyze the latest 10-K for Celsius Holdings. Cover key risk factors, m
 
 async def main():
     print(f"Ticker: {ticker}\nQuery: {query}\n{'='*60}\n")
-    result = await filings.ainvoke({"ticker": ticker, "query": query})
-    print(result)
+    result = await filings["runnable"].ainvoke(
+        {"messages": [{"role": "user", "content": f"Ticker: {ticker}\n{query}"}]}
+    )
+    messages = result.get("messages", [])
+    if messages:
+        last = messages[-1]
+        print(last.content if hasattr(last, "content") else str(last))
+    else:
+        print("No messages returned.")
 
 asyncio.run(main())
