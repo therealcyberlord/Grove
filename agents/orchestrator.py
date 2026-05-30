@@ -11,7 +11,7 @@ from langfuse.langchain import CallbackHandler as LangfuseCallbackHandler
 from clients.langfuse import get_langfuse_client
 
 
-deepagent = create_deep_agent(
+orchestrator = create_deep_agent(
     model=build_openrouter_client(temperature=0.2),
     tools=[ticker_lookup],
     system_prompt=SYSTEM_PROMPT,
@@ -20,5 +20,4 @@ deepagent = create_deep_agent(
 )
 
 get_langfuse_client()  # validates credentials; raises clearly if not configured
-agent = deepagent.with_config({"callbacks": [LangfuseCallbackHandler()]})
-graph = deepagent  # public alias for eval runner (no callback baked in)
+agent = orchestrator.with_config({"callbacks": [LangfuseCallbackHandler()]})
