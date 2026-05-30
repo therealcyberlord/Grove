@@ -62,12 +62,12 @@ ANTHROPIC_API_KEY=          # Optional - Claude API (not used by default agents)
 EDGAR_IDENTITY=             # Optional - SEC EDGAR User-Agent (default: "Grove Agent (dev)")
 ```
 
-Langfuse is required at startup - the app will raise clearly if any of the three Langfuse variables are missing.
+Langfuse credentials are required - `LangfuseCallbackHandler` is wired explicitly in each example and eval script.
 
 ## Running
 
 ```bash
-# Full in-depth analysis
+# Sentiment query (routes to news_macro only)
 uv run python -m examples.test_orchestrator
 
 # Individual subagents

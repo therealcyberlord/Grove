@@ -35,7 +35,7 @@ clients/
   langfuse.py                  # get_langfuse_client() singleton - required, raises if not configured
   pageindex.py                 # get_pageindex_client() - wraps local lib/PageIndex
 evals/
-  runner.py                    # Langfuse experiment runner (orchestrator + subagent experiments)
+  experiments.py               # Langfuse experiment runner (orchestrator + subagent experiments)
   dataset.py                   # EvalCase + SubagentEvalCase definitions; eval_dataset + subagent_eval_dataset
   scorers/
     routing.py                 # score_routing - Jaccard similarity of detected vs expected subagents
@@ -150,7 +150,7 @@ OPENROUTER_API_KEY         # Primary LLM (DeepSeek, Gemini via OpenRouter)
 ANTHROPIC_API_KEY          # Claude API (build_claude_client - not used by default agents)
 TAVILY_API_KEY             # All Tavily search tools
 EDGAR_IDENTITY             # SEC EDGAR User-Agent (default: "Grove Agent (dev)")
-LANGFUSE_PUBLIC_KEY        # Observability - required; app raises on startup if missing
+LANGFUSE_PUBLIC_KEY        # Observability - required; wired per-call via LangfuseCallbackHandler
 LANGFUSE_SECRET_KEY        # Observability - required
 LANGFUSE_BASE_URL          # Observability - required
 ```
