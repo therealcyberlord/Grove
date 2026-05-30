@@ -1,21 +1,17 @@
 from functools import lru_cache
 
-from dotenv import load_dotenv
-from langfuse import get_client
+from langfuse import Langfuse
 
-load_dotenv()
+from clients.config import settings
 
 
 @lru_cache(maxsize=1)
 def get_langfuse_client():
-    """Return the Langfuse client. Reads credentials from env vars.
-
-    Raises ValueError if LANGFUSE_PUBLIC_KEY / SECRET_KEY are not set or tracing is disabled.
-    """
-    client = get_client()
+    client = Langfuse(
+        public_key=settings.langfuse_public_key,
+        secret_key=settings.langfuse_secret_key,
+        host=settings.langfuse_base_url,
+    )
     if not client._tracing_enabled:
-        raise ValueError(
-            "Langfuse client is disabled. Set LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, "
-            "and LANGFUSE_BASE_URL environment variables."
-        )
+        raise ValueError("Langfuse tracing is disabled. Check LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, and LANGFUSE_BASE_URL.")
     return client

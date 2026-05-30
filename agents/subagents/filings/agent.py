@@ -1,11 +1,9 @@
 """Filings subagent - SEC filing analysis via EDGAR and PageIndex."""
 import asyncio
 import logging
-import os
 from pathlib import Path
 
 from deepagents import CompiledSubAgent
-from dotenv import load_dotenv
 from langchain.agents import create_agent
 from langchain.agents.middleware import ModelRetryMiddleware, ToolCallLimitMiddleware
 from langchain_core.tools import tool
@@ -14,8 +12,6 @@ from agents.subagents.filings.system_prompt import SYSTEM_PROMPT
 from agents.tools.pageindex import pageindex_get_page_content, pageindex_get_structure
 from clients.llm import build_openrouter_client
 from clients.pageindex import get_pageindex_client
-
-load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -26,8 +22,8 @@ def _do_fetch_and_index(ticker: str) -> tuple[str, str]:
     """Returns (doc_id, period_of_report) for the latest 10-K."""
     from edgar import Company, set_identity
 
-    identity = os.environ.get("EDGAR_IDENTITY", "Grove Agent (dev)")
-    set_identity(identity)
+    from clients.config import settings
+    set_identity(settings.edgar_identity)
 
     company = Company(ticker)
     filing = company.get_filings(form="10-K").latest()
@@ -82,16 +78,17 @@ async def fetch_and_index_filing(ticker: str) -> dict:
         return {"doc_id": None, "period": None, "error": str(exc)}
 
 
-_tools = [fetch_and_index_filing, pageindex_get_structure, pageindex_get_page_content]
+tools = [fetch_and_index_filing, pageindex_get_structure, pageindex_get_page_content]
 
-_agent = create_agent(
+agent = create_agent(
     model=build_openrouter_client(temperature=0.1),
-    tools=_tools,
+    tools=tools,
     system_prompt=SYSTEM_PROMPT,
     middleware=[
         ModelRetryMiddleware(max_retries=3, backoff_factor=2.0, initial_delay=1.0),
         ToolCallLimitMiddleware(tool_name="pageindex_get_page_content", run_limit=5, exit_behavior="continue"),
     ],
+    name="filings_subagent",
 )
 
 filings: CompiledSubAgent = {
@@ -101,5 +98,5 @@ filings: CompiledSubAgent = {
         "via EDGAR and PageIndex. Covers risk factors, management tone, guidance language, "
         "audit opinions, and governance red flags."
     ),
-    "runnable": _agent,
+    "runnable": agent,
 }
