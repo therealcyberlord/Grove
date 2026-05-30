@@ -7,8 +7,6 @@ from agents.subagents.news_macro.agent import news_macro
 from agents.system_prompt import SYSTEM_PROMPT
 from agents.tools.yahoo_finance import ticker_lookup
 from clients.llm import build_openrouter_client
-from langfuse.langchain import CallbackHandler as LangfuseCallbackHandler
-from clients.langfuse import get_langfuse_client
 
 
 orchestrator = create_deep_agent(
@@ -18,6 +16,3 @@ orchestrator = create_deep_agent(
     subagents=[news_macro, market_data, filings],
     name="Grove",
 )
-
-get_langfuse_client()  # validates credentials; raises clearly if not configured
-agent = orchestrator.with_config({"callbacks": [LangfuseCallbackHandler()]})
