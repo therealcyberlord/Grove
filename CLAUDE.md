@@ -34,6 +34,13 @@ clients/
   tavily.py                    # get_tavily_client() singleton
   langfuse.py                  # get_langfuse_client() singleton - required, raises if not configured
   pageindex.py                 # get_pageindex_client() - wraps local lib/PageIndex
+evals/
+  runner.py                    # Langfuse experiment runner (orchestrator + subagent experiments)
+  dataset.py                   # EvalCase + SubagentEvalCase definitions; eval_dataset + subagent_eval_dataset
+  scorers/
+    routing.py                 # score_routing - Jaccard similarity of detected vs expected subagents
+    structure.py               # score_structure - required/forbidden section header checks
+    urls.py                    # score_no_fabricated_urls - all report URLs must come from tool results
 lib/
   PageIndex/                   # PageIndex local library (not a pip package)
 schemas/
@@ -174,25 +181,61 @@ LANGFUSE_BASE_URL          # Observability - required
 - `yfinance` label matching for FCF, ROE, and ROA derivation uses string matching against DataFrame index labels - may break if yfinance changes its schema.
 - `tavily_general_search` is defined but not currently wired to any subagent. Available for future use.
 
-## Next Steps
+## Evaluation
 
-### Evaluation (immediate)
+The eval harness is implemented and live. Run via:
 
-The current priority is building an eval harness before deployment. Langfuse traces are already captured - the next step is defining scoring criteria and a representative dataset.
+```bash
+# Full orchestrator eval suite
+PYTHONPATH=. uv run python -m evals.experiments
 
-**Dataset:** cover the three query types with known-good behavior:
-- Sentiment queries (e.g. "What's the sentiment on CELH?") → news_macro only
-- Deep dive queries (e.g. "Analyze NVDA") → all three subagents
-- Comparison queries (e.g. "Compare AAPL vs MSFT") → parallel subagent calls
+# Filter by routing type
+PYTHONPATH=. uv run python -m evals.experiments sentiment market_data
 
-**Evals to configure in Langfuse:**
+# Subagent isolation evals
+PYTHONPATH=. uv run python -m evals.experiments subagent
 
-| Eval | Method | Focus |
+# Filter by subagent
+PYTHONPATH=. uv run python -m evals.experiments subagent news_macro
+```
+
+### Datasets
+
+Two Langfuse datasets are auto-synced on each run:
+
+| Dataset | Langfuse name | Cases | Purpose |
+|---|---|---|---|
+| `eval_dataset` | `grove-orchestrator-v1` | 21 cases | End-to-end orchestrator quality |
+| `subagent_eval_dataset` | `grove-subagent-v1` | 6 cases | Per-subagent isolation |
+
+`eval_dataset` covers 5 routing types: `sentiment` (7), `market_data` (4), `filings` (3), `deep_dive` (4), `comparison` (3). Cases are defined in `evals/dataset.py` — edit there, not in the Langfuse UI.
+
+### Scorers (orchestrator)
+
+| Scorer | Type | What it checks |
 |---|---|---|
-| `source_citation` | LLM-as-judge | Are all factual claims backed by cited sources? |
-| `report_completeness` | LLM-as-judge | Does the report address what the user asked? |
-| `no_fabricated_urls` | Rule-based | Are all URLs from tool results, not constructed? |
-| `subagent_routing` | LLM-as-judge | Did the orchestrator invoke the right subagents for the query? |
+| `subagent_routing` | Rule-based | Jaccard similarity of detected vs expected subagents (partial credit) |
+| `no_fabricated_urls` | Rule-based | Every URL in report came from a tool result |
+
+Subagent detection works by fingerprinting tool names: `tavily_*` → news_macro, `yfinance_*`/`calculate` → market_data, `pageindex_*`/`fetch_and_index_filing` → filings. Section header checks were intentionally omitted — the orchestrator adapts section titles to query type (e.g. earnings queries get custom headers), so header assertions produce false failures.
+
+### Scorers (subagent)
+
+| Scorer | Type | What it checks |
+|---|---|---|
+| `subagent_quality` | Rule-based | Output >200 chars AND contains a citation ("source" or "http") |
+| `no_fabricated_urls` | Rule-based | Same URL check as orchestrator |
+
+### LLM-as-judge (Langfuse-native)
+
+Two LLM-as-judge evaluators are configured directly in Langfuse and fire automatically on every trace with name "Grove":
+
+- **Agent Helpfulness** — does the report address what the user asked?
+- **Source Citation** — are all factual claims backed by cited sources?
+
+These run on both live production traces and experiment traces created by the eval runner.
+
+## Next Steps
 
 ### Phase 2 Roadmap
 
