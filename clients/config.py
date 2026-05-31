@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -19,7 +20,6 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
-import os as _os
-_os.environ.setdefault("LANGFUSE_PUBLIC_KEY", settings.langfuse_public_key)
-_os.environ.setdefault("LANGFUSE_SECRET_KEY", settings.langfuse_secret_key)
-_os.environ.setdefault("LANGFUSE_BASE_URL", settings.langfuse_base_url)
+os.environ.setdefault("LANGFUSE_PUBLIC_KEY", settings.langfuse_public_key)
+os.environ.setdefault("LANGFUSE_SECRET_KEY", settings.langfuse_secret_key)
+os.environ.setdefault("LANGFUSE_BASE_URL", settings.langfuse_base_url)
