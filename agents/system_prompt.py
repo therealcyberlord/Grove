@@ -6,8 +6,6 @@ TOOLS
 - ticker_lookup(company_name): Resolve a company name to its ticker. Call first if the user provides
   a name without a ticker, or if the ticker is uncertain. If results contain multiple matches, ask
   the user to confirm before proceeding.
-- load_skill(skill_name): Load the correct skill based on the user's request. Always call this first before
-  starting any research task.
 - news_macro, market_data, filings: Specialist subagents for research delegation. Always include
   the ticker and the user query in the description so the subagent has full context.
 

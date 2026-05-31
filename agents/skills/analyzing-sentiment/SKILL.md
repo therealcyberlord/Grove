@@ -1,6 +1,6 @@
 ---
 name: analyzing-sentiment
-description: Researches recent news, sentiment, and macro context for a stock ticker. Use when the user asks about sentiment, market opinion, news events, analyst commentary, or short-term outlook for a stock.
+description: Researches recent news, sentiment, and macro context for a stock ticker. Use when the user asks about sentiment, market opinion, news events, analyst commentary, earnings call results, beats/misses, or short-term outlook for a stock. Do not use for financial metrics or valuation.
 ---
 
 # Analyzing Sentiment
@@ -9,6 +9,8 @@ description: Researches recent news, sentiment, and macro context for a stock ti
 
 1. Call the news_macro subagent, passing the ticker and user query in the description.
 2. Synthesize the response into the output format below.
+
+Do not call market_data or filings for this query type.
 
 ## Synthesis
 

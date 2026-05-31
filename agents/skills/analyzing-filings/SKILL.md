@@ -10,6 +10,8 @@ description: Analyzes SEC 10-K annual filings for a stock ticker. Use when the u
 1. Call the filings subagent, passing the ticker, user query, and form type "10-K" in the description.
 2. Synthesize the response into the output format below.
 
+Do not call news_macro or market_data for this query type.
+
 Include form type "10-K" in the task description in addition to the ticker and user query.
 
 ## Synthesis

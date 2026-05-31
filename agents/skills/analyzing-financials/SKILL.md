@@ -1,6 +1,6 @@
 ---
 name: analyzing-financials
-description: Retrieves and analyzes quantitative market data for a stock ticker. Use when the user asks about financials, valuation multiples, earnings, margins, cash flows, balance sheet, or capital allocation.
+description: Retrieves and analyzes quantitative market data for a stock ticker. Use when the user asks about financials, valuation multiples, earnings metrics (EPS, revenue figures), margins, cash flows, balance sheet, or capital allocation. Do not use for news, sentiment, or earnings call discussions.
 ---
 
 # Analyzing Financials
@@ -9,6 +9,8 @@ description: Retrieves and analyzes quantitative market data for a stock ticker.
 
 1. Call the market_data subagent, passing the ticker and user query in the description.
 2. Synthesize the response into the output format below.
+
+Do not call news_macro or filings for this query type.
 
 ## Synthesis
 
