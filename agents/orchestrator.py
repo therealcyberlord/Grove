@@ -1,5 +1,6 @@
 """Grove orchestrator - routes user queries to specialist subagents and synthesizes a final report."""
 from deepagents import create_deep_agent
+from deepagents.backends import FilesystemBackend
 
 from agents.subagents.filings.agent import filings
 from agents.subagents.market_data.agent import market_data
@@ -14,5 +15,7 @@ orchestrator = create_deep_agent(
     tools=[ticker_lookup],
     system_prompt=SYSTEM_PROMPT,
     subagents=[news_macro, market_data, filings],
+    backend=FilesystemBackend(root_dir=".", virtual_mode=True),
+    skills=["./agents/skills/"],
     name="Grove",
 )

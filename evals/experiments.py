@@ -10,7 +10,7 @@ from agents.orchestrator import orchestrator
 from clients.config import settings
 from evals.dataset import eval_dataset, subagent_eval_dataset
 from evals.scorers.llm_judge import score_helpfulness, score_subagent_quality
-from evals.scorers.routing import score_routing
+from evals.scorers.routing import SUBAGENT_TOOLS, score_routing
 from evals.scorers.urls import URL_RE, score_no_fabricated_urls
 
 logger = logging.getLogger(__name__)
@@ -64,9 +64,14 @@ async def _task(*, item, **_):
         {"messages": [{"role": "user", "content": query}]}
     )
     messages = result.get("messages", [])
+    tool_set = capture.tool_names
+    called_subagents = sorted(
+        subagent for subagent, tools in SUBAGENT_TOOLS.items() if tools & tool_set
+    )
     return {
         "report": messages[-1].content if messages else "",
-        "tool_names": sorted(capture.tool_names),
+        "called_subagents": called_subagents,
+        "tool_names": sorted(tool_set),
         "tool_urls": sorted(capture.tool_urls),
     }
 
