@@ -117,6 +117,20 @@ examples/                      # Manual run scripts
 | `market_data` | Yahoo Finance (yfinance) | Valuation, margins, cash flows, balance sheet |
 | `filings` | SEC EDGAR + PageIndex | 10-K risk factors, MD&A, audit opinion |
 
+## Testing
+
+Unit tests cover the deterministic scorer functions in `evals/scorers/`. No API keys or external services needed.
+
+```bash
+# Run all tests
+PYTHONPATH=. uv run pytest tests/
+
+# Run with verbose output
+PYTHONPATH=. uv run pytest tests/ -v
+```
+
+Tests live in `tests/scorers/` and cover `score_routing`, `score_no_fabricated_urls`, and `score_structure`.
+
 ## Adding a New Subagent
 
 1. Create `agents/subagents/<name>/` with `__init__.py`, `agent.py`, `system_prompt.py`
