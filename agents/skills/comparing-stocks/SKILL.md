@@ -7,10 +7,10 @@ description: Side-by-side comparison of two or more stocks across news, financia
 
 ## Procedure
 
-1. Call relevant subagents per ticker in parallel. For a full comparison, call all three for each ticker:
+1. Call news_macro and market_data for each ticker in parallel:
    - news_macro for TICKER_A, then for TICKER_B
    - market_data for TICKER_A, then for TICKER_B
-   - filings for TICKER_A, then for TICKER_B (if filing analysis is in scope)
+2. Call filings for each ticker only if the user explicitly mentions filings, 10-K, annual reports, risk factors, or governance.
 3. Synthesize all responses into side-by-side sections below.
 
 ## Synthesis
