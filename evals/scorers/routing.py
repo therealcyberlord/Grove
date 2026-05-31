@@ -1,7 +1,7 @@
 """Checks which subagents ran by inspecting tool names captured during graph execution."""
 from langfuse.experiment import Evaluation
 
-_SUBAGENT_TOOLS: dict[str, set[str]] = {
+SUBAGENT_TOOLS: dict[str, set[str]] = {
     "news_macro": {"tavily_news_search", "tavily_finance_search", "tavily_extract"},
     "market_data": {"yfinance_get_market_data", "calculate"},
     "filings": {"fetch_and_index_filing", "pageindex_get_structure", "pageindex_get_page_content"},
@@ -9,11 +9,11 @@ _SUBAGENT_TOOLS: dict[str, set[str]] = {
 
 
 def score_routing(tool_names: list[str], expected: list[str]) -> Evaluation:
-    # Jaccard similarity (https://en.wikipedia.org/wiki/Jaccard_index); partial credit for partial matches, penalizes over-routing.
+    # Jaccard similarity; partial credit for partial matches, penalizes over-routing.
     tool_set = set(tool_names)
     detected = {
         subagent
-        for subagent, tools in _SUBAGENT_TOOLS.items()
+        for subagent, tools in SUBAGENT_TOOLS.items()
         if tools & tool_set
     }
     expected_set = set(expected)
