@@ -1,38 +1,52 @@
 # Grove
 
-**The Analyst's Workbench** - A financial research assistant that generates detailed, sourced stock reports on demand. Ask a question (sentiment, deep analysis, comparison) and Grove delegates to specialist subagents, then synthesizes a markdown report with cited sources.
+<img src="Grove.png" width="280" alt="Grove" />
 
-## How It Works
+<sub>Image generated using Google Gemini Nano Banana</sub>
+
+**The Analyst's Workbench.** Ask a question about any stock and Grove routes it to specialist AI subagents, then synthesizes a sourced markdown report with an investment thesis.
+
+---
+
+## What It Does
+
+| Query type | Example | Subagents called |
+|---|---|---|
+| Sentiment | `"What's the sentiment on CELH?"` | `news_macro` |
+| Market data | `"Give me NVDA's financials"` | `market_data` |
+| Deep dive | `"Give me an in-depth analysis of AAPL"` | all three |
+| Comparison | `"Compare AAPL vs MSFT"` | all three, per ticker |
+
+Every report includes inline citations. URLs are sourced exclusively from tool results, never fabricated.
+
+## Architecture
 
 ```
 user query
   ↓
-orchestrator - decides which subagents to call based on query type
-  ├─ news_macro(ticker)    → sentiment, key events, macro context, forward scenarios
-  ├─ market_data(ticker)   → valuation, margins, cash flows, balance sheet
-  └─ filings(ticker)       → 10-K risk factors, management tone, audit, red flags
+orchestrator: decides subagents + tickers
+  ├─ news_macro(ticker)   → sentiment, events, macro context
+  ├─ market_data(ticker)  → valuation, margins, cash flows, balance sheet
+  └─ filings(ticker)      → 10-K risk factors, MD&A, audit opinion
   ↓
-orchestrator synthesizes → final markdown report with investment thesis and all sources
+synthesized markdown report with investment thesis and sources
 ```
-
-**Query routing:**
-- `"What is the sentiment for CELH?"` → `news_macro` only
-- `"Give me an in-depth analysis of NVDA"` → all three subagents
-- `"Compare AAPL vs MSFT"` → each subagent called per ticker in parallel
 
 ## Tech Stack
 
-- **LLM**: DeepSeek V4 Pro via OpenRouter; Gemini Flash Lite for article summarization
-- **Orchestration**: DeepAgents - orchestrator-subagent pattern
-- **Search**: Tavily (news, finance, extract)
-- **Market data**: yfinance
-- **SEC filings**: edgartools + PageIndex
-- **Observability**: Langfuse
-- **Package manager**: uv (Python 3.12+)
+| Layer | Technology |
+|---|---|
+| LLM | DeepSeek V4 Pro via OpenRouter; Gemini Flash Lite (summarization) |
+| Orchestration | DeepAgents (orchestrator-subagent pattern) |
+| Search | Tavily (news, finance, extract) |
+| Market data | yfinance |
+| SEC filings | edgartools + PageIndex |
+| Observability | Langfuse |
+| Runtime | Python 3.12+, uv |
 
 ## Setup
 
-### 1. Clone the repository and install dependencies
+**1. Clone and install**
 
 ```bash
 git clone https://github.com/therealcyberlord/Grove
@@ -40,34 +54,28 @@ cd backend
 uv sync
 ```
 
-### 2. Clone PageIndex into lib/
-
-PageIndex is a local library (not a pip package) used for 10-K document navigation.
+**2. Clone PageIndex** (local library, not on PyPI)
 
 ```bash
 git clone https://github.com/VectifyAI/PageIndex lib/PageIndex
 ```
 
-### 3. Configure environment variables
-
-Create a `.env` file in the project root:
+**3. Configure environment variables.** Create a `.env` in the project root:
 
 ```
-OPENROUTER_API_KEY=         # Required - DeepSeek and Gemini via OpenRouter
-TAVILY_API_KEY=             # Required - all search tools
-LANGFUSE_PUBLIC_KEY=        # Required - observability
-LANGFUSE_SECRET_KEY=        # Required - observability
-LANGFUSE_BASE_URL=          # Required - e.g. https://us.cloud.langfuse.com
-ANTHROPIC_API_KEY=          # Optional - Claude API (not used by default agents)
-EDGAR_IDENTITY=             # Optional - SEC EDGAR User-Agent (default: "Grove Agent (dev)")
+OPENROUTER_API_KEY=         # Required: DeepSeek and Gemini via OpenRouter
+TAVILY_API_KEY=             # Required: all search tools
+LANGFUSE_PUBLIC_KEY=        # Required: observability
+LANGFUSE_SECRET_KEY=        # Required: observability
+LANGFUSE_BASE_URL=          # Required: e.g. https://us.cloud.langfuse.com
+ANTHROPIC_API_KEY=          # Optional: Claude API (not used by default agents)
+EDGAR_IDENTITY=             # Required: SEC EDGAR User-Agent
 ```
-
-Langfuse credentials are required - `LangfuseCallbackHandler` is wired explicitly in each example and eval script.
 
 ## Running
 
 ```bash
-# Sentiment query (routes to news_macro only)
+# Full orchestrator (routes automatically based on query)
 uv run python -m examples.test_orchestrator
 
 # Individual subagents
@@ -76,63 +84,47 @@ uv run python -m examples.test_market_data
 uv run python -m examples.test_filings
 ```
 
+## Testing
+
+Grove has two layers of testing:
+
+**Unit tests** cover the deterministic scorer functions with no API keys or external services needed:
+
+```bash
+PYTHONPATH=. uv run pytest tests/ -v
+```
+
+**Eval harness** provides two Langfuse-backed suites that run the live agents and score output quality:
+- Orchestrator suite (`grove-orchestrator-v1`): 21 end-to-end cases across 5 routing types, scored for routing accuracy and citation integrity
+- Subagent suite (`grove-subagent-v1`): 6 isolation cases (2 per subagent), scored with an LLM judge per-subagent rubric
+
+See [evals/README.md](evals/README.md) for commands, scorer details, and cost notes.
+
 ## Project Structure
 
 ```
 agents/
-  orchestrator.py              # Routes queries to subagents, synthesizes final report
-  middleware/                  # Cross-cutting middleware applied per agent
-    system_date.py             # Injects today's date into every model call
-    tavily_extract_summarizer.py  # Compresses long article extracts using Gemini
-  prompts/
-    citations.py               # Shared CITATIONS_GUIDANCE prompt snippet
-  tools/                       # Single source of truth for all tools
-    tavily.py                  # tavily_news_search, tavily_finance_search, tavily_extract
-    yahoo_finance.py           # yfinance_get_market_data, ticker_lookup
-    pageindex.py               # pageindex_get_structure, pageindex_get_page_content
-    calculator.py              # Safe eval calculator
+  orchestrator.py           # Routes queries, synthesizes final report
+  middleware/               # SystemDateMiddleware, TavilyExtractSummarizer, ModelRetryMiddleware
+  prompts/                  # Shared prompt snippets (citations guidance)
+  tools/                    # Single source of truth for all tools
   subagents/
-    news_macro/                # Sentiment, news events, macro context
-    market_data/               # Quantitative metrics via yfinance
-    filings/                   # Qualitative 10-K analysis via EDGAR + PageIndex
-clients/
-  llm.py                       # LLM client factories
-  tavily.py                    # Tavily client singleton
-  langfuse.py                  # Langfuse client singleton
-  pageindex.py                 # PageIndex client wrapper
-lib/
-  PageIndex/                   # Cloned from github.com/VectifyAI/PageIndex
-schemas/
-  agents.py                    # AgentRunRequest Pydantic model
-documents/                     # 10-K markdown files fetched from EDGAR (auto-created)
-workspace/                     # PageIndex index storage (auto-created)
-examples/                      # Manual run scripts
+    news_macro/             # Sentiment, news, macro context
+    market_data/            # Quantitative metrics via yfinance
+    filings/                # 10-K analysis via EDGAR + PageIndex
+  skills/
+    analyzing-sentiment/    # Skill: sentiment analysis workflow
+    analyzing-financials/   # Skill: financial metrics workflow
+    analyzing-filings/      # Skill: SEC filing analysis workflow
+    deep-dive-analysis/     # Skill: full deep-dive report workflow
+    comparing-stocks/       # Skill: multi-ticker comparison workflow
+clients/                    # LLM, Tavily, Langfuse, PageIndex singletons
+evals/                      # Eval harness, datasets, and scorers (see evals/README.md)
+lib/PageIndex/              # Cloned from github.com/VectifyAI/PageIndex
 ```
 
-## Data Sources
-
-| Subagent | Data Source | Coverage |
-|---|---|---|
-| `news_macro` | Tavily (news + finance search) | Recent news, analyst ratings, macro signals |
-| `market_data` | Yahoo Finance (yfinance) | Valuation, margins, cash flows, balance sheet |
-| `filings` | SEC EDGAR + PageIndex | 10-K risk factors, MD&A, audit opinion |
-
-## Testing
-
-Unit tests cover the deterministic scorer functions in `evals/scorers/`. No API keys or external services needed.
-
-```bash
-# Run all tests
-PYTHONPATH=. uv run pytest tests/
-
-# Run with verbose output
-PYTHONPATH=. uv run pytest tests/ -v
-```
-
-Tests live in `tests/scorers/` and cover `score_routing`, `score_no_fabricated_urls`, and `score_structure`.
-
-## Adding a New Subagent
+## Adding a Subagent
 
 1. Create `agents/subagents/<name>/` with `__init__.py`, `agent.py`, `system_prompt.py`
-2. Add any shared tools to `agents/tools/`; subagent-specific tools go in `agent.py`
-3. Register the subagent in `orchestrator.py` and update the routing section of the orchestrator system prompt
+2. Add shared tools to `agents/tools/`; subagent-specific tools go in `agent.py`
+3. Register in `orchestrator.py` and update the routing section of the orchestrator system prompt

@@ -4,7 +4,7 @@
 
 ## Tech Stack
 
-- **LLM**: DeepSeek V4 Pro via OpenRouter (`build_openrouter_client()`); Gemini Flash Lite for Tavily extract summarization
+- **LLM**: DeepSeek V4 Pro via OpenRouter (`build_openrouter_client()`); `google/gemini-3.1-flash-lite-preview` via OpenRouter for Tavily extract summarization and LLM-as-judge scoring
 - **Orchestration**: DeepAgents (`deepagents`) - orchestrator-subagent pattern
 - **Tools**: LangChain `@tool` decorators, async-first, blocking libs run in executor
 - **Package manager**: `uv` - use `uv run` or `uv add`, not pip
@@ -15,6 +15,7 @@
 ```
 agents/
   orchestrator.py              # Orchestrator - routes queries to subagents, synthesizes report
+  system_prompt.py             # Orchestrator system prompt (SYSTEM_PROMPT constant)
   middleware/                  # Cross-cutting middleware applied per agent
     system_date.py             # SystemDateMiddleware - injects today's date into every model call
     tavily_extract_summarizer.py  # TavilyExtractSummarizer - compresses long extract results
@@ -29,7 +30,14 @@ agents/
     news_macro/                # Sentiment, news events, macro context
     market_data/               # Quantitative metrics via yfinance
     filings/                   # Qualitative 10-K analysis via EDGAR + PageIndex
+  skills/
+    analyzing-sentiment/       # Skill: sentiment analysis workflow
+    analyzing-financials/      # Skill: financial metrics workflow
+    analyzing-filings/         # Skill: SEC filing analysis workflow
+    deep-dive-analysis/        # Skill: full deep-dive report workflow
+    comparing-stocks/          # Skill: multi-ticker comparison workflow
 clients/
+  config.py                    # Settings (pydantic-settings) - central env var config
   llm.py                       # build_claude_client() and build_openrouter_client() factories
   tavily.py                    # get_tavily_client() singleton
   langfuse.py                  # get_langfuse_client() singleton - required, raises if not configured
@@ -39,8 +47,14 @@ evals/
   dataset.py                   # EvalCase + SubagentEvalCase definitions; eval_dataset + subagent_eval_dataset
   scorers/
     routing.py                 # score_routing - Jaccard similarity of detected vs expected subagents
-    structure.py               # score_structure - required/forbidden section header checks
+    structure.py               # score_structure - required/forbidden section header checks (unit tests only)
     urls.py                    # score_no_fabricated_urls - all report URLs must come from tool results
+    llm_judge.py               # score_helpfulness + score_subagent_quality (Gemini Flash Lite judge)
+tests/
+  scorers/                     # Unit tests for deterministic scorers (no API keys needed)
+    test_routing.py
+    test_structure.py
+    test_urls.py
 lib/
   PageIndex/                   # PageIndex local library (not a pip package)
 schemas/
@@ -97,7 +111,7 @@ All agents use factories from `clients/llm.py`:
 Middleware is registered per-agent in `create_agent(middleware=[...])`. All middleware lives in `agents/middleware/`.
 
 - **`SystemDateMiddleware`** - prepends `"Today's date is {date}."` to the system message on every model call. Used by `news_macro` (date-sensitive news queries) and `market_data` (anchors "real-time" price data to the report run date).
-- **`TavilyExtractSummarizer`** - intercepts `tavily_extract` tool results and summarizes articles above a character threshold using Gemini Flash Lite. Prevents context bloat from long articles. Used by `news_macro`.
+- **`TavilyExtractSummarizer`** - intercepts `tavily_extract` tool results and summarizes articles above a character threshold using `google/gemini-3.1-flash-lite-preview`. Prevents context bloat from long articles. Used by `news_macro`.
 - **`ModelRetryMiddleware`** - retries on model errors with exponential backoff (`max_retries=3, backoff_factor=2.0`). Used by all subagents.
 - **`ToolCallLimitMiddleware`** - caps expensive tool calls per run. Used by `filings` to limit `pageindex_get_page_content` to 5 calls.
 
@@ -149,7 +163,7 @@ Do not instantiate these directly in tool or agent files.
 OPENROUTER_API_KEY         # Primary LLM (DeepSeek, Gemini via OpenRouter)
 ANTHROPIC_API_KEY          # Claude API (build_claude_client - not used by default agents)
 TAVILY_API_KEY             # All Tavily search tools
-EDGAR_IDENTITY             # SEC EDGAR User-Agent (default: "Grove Agent (dev)")
+EDGAR_IDENTITY             # SEC EDGAR User-Agent
 LANGFUSE_PUBLIC_KEY        # Observability - required; wired per-call via LangfuseCallbackHandler
 LANGFUSE_SECRET_KEY        # Observability - required
 LANGFUSE_BASE_URL          # Observability - required
@@ -216,6 +230,7 @@ Two Langfuse datasets are auto-synced on each run:
 |---|---|---|
 | `subagent_routing` | Rule-based | Jaccard similarity of detected vs expected subagents (partial credit) |
 | `no_fabricated_urls` | Rule-based | Every URL in report came from a tool result |
+| `helpfulness` | LLM-as-judge | Does the report answer the query with ticker-specific data? (Gemini Flash Lite) |
 
 Subagent detection works by fingerprinting tool names: `tavily_*` → news_macro, `yfinance_*`/`calculate` → market_data, `pageindex_*`/`fetch_and_index_filing` → filings. Section header checks were intentionally omitted — the orchestrator adapts section titles to query type (e.g. earnings queries get custom headers), so header assertions produce false failures.
 
@@ -223,17 +238,8 @@ Subagent detection works by fingerprinting tool names: `tavily_*` → news_macro
 
 | Scorer | Type | What it checks |
 |---|---|---|
-| `subagent_quality` | Rule-based | Output >200 chars AND contains a citation ("source" or "http") |
+| `subagent_quality` | LLM-as-judge | Per-subagent rubric covering required content and citation style (Gemini Flash Lite) |
 | `no_fabricated_urls` | Rule-based | Same URL check as orchestrator |
-
-### LLM-as-judge (Langfuse-native)
-
-Two LLM-as-judge evaluators are configured directly in Langfuse and fire automatically on every trace with name "Grove":
-
-- **Agent Helpfulness** — does the report address what the user asked?
-- **Source Citation** — are all factual claims backed by cited sources?
-
-These run on both live production traces and experiment traces created by the eval runner.
 
 ## Next Steps
 
