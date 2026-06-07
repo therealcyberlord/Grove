@@ -1,13 +1,14 @@
 """Quick test for the news_macro subagent."""
 import asyncio
 from agents.subagents.news_macro.agent import news_macro
-from langfuse.langchain import CallbackHandler as LangfuseCallbackHandler
+from clients.langfuse import get_langfuse_callback
 
 query = "What is the current sentiment for CELH (Celsius Holdings)?"
 
 async def main():
     print(f"Query: {query}\n")
-    result = await news_macro["runnable"].with_config({"callbacks": [LangfuseCallbackHandler()]}).ainvoke(
+    callbacks = [cb for cb in [get_langfuse_callback()] if cb is not None]
+    result = await news_macro["runnable"].with_config({"callbacks": callbacks}).ainvoke(
         {"messages": [{"role": "user", "content": query}]}
     )
     messages = result.get("messages", [])

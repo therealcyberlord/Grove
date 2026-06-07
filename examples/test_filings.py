@@ -2,7 +2,7 @@
 import asyncio
 import logging
 from agents.subagents.filings.agent import filings
-from langfuse.langchain import CallbackHandler as LangfuseCallbackHandler
+from clients.langfuse import get_langfuse_callback
 
 logging.basicConfig(level=logging.INFO, format="%(name)s %(levelname)s %(message)s")
 
@@ -11,7 +11,8 @@ query = "Analyze the latest 10-K for Celsius Holdings. Cover key risk factors, m
 
 async def main():
     print(f"Ticker: {ticker}\nQuery: {query}\n{'='*60}\n")
-    result = await filings["runnable"].with_config({"callbacks": [LangfuseCallbackHandler()]}).ainvoke(
+    callbacks = [cb for cb in [get_langfuse_callback()] if cb is not None]
+    result = await filings["runnable"].with_config({"callbacks": callbacks}).ainvoke(
         {"messages": [{"role": "user", "content": f"Ticker: {ticker}\n{query}"}]}
     )
     messages = result.get("messages", [])
