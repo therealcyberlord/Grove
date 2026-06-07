@@ -26,3 +26,14 @@ dependencies = [
 dev = [
     "pytest>=9.0.3",
 ]
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore::DeprecationWarning:PyPDF2",
+    "ignore:.*builtin type SwigPyPacked.*:DeprecationWarning",
+    "ignore:.*builtin type SwigPyObject.*:DeprecationWarning",
+    "ignore:.*builtin type swigvarlink.*:DeprecationWarning",
+    "ignore:.*edgar\\.files\\.html_documents.*:DeprecationWarning:edgar",
+    "ignore:.*edgar\\.files\\.html.*:DeprecationWarning:edgar",
+    "ignore:.*edgar\\.files\\.htmltools.*:DeprecationWarning:edgar",
+]
