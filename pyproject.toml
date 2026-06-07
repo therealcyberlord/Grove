@@ -5,16 +5,19 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "boto3>=1.43.23",
     "deepagents>=0.5.3",
     "edgartools>=5.30.0",
     "langchain-openrouter>=0.2.1",
     "langfuse>=4.3.1",
     "langgraph>=1.1.8",
     "litellm==1.83.0",
+    "psycopg2-binary>=2.9.12",
     "pydantic-settings>=2.14.1",
     "pymupdf==1.26.4",
     "pypdf2==3.0.1",
     "ruff>=0.15.15",
+    "sqlalchemy>=2.0.50",
     "tavily-python>=0.7.23",
     "yfinance>=1.3.0",
 ]
