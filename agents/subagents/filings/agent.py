@@ -1,6 +1,8 @@
 """Filings subagent - SEC filing analysis via EDGAR and PageIndex."""
 import asyncio
 import logging
+import tempfile
+from datetime import date
 from pathlib import Path
 
 from deepagents import CompiledSubAgent
@@ -15,7 +17,7 @@ from clients.pageindex import get_pageindex_client
 
 logger = logging.getLogger(__name__)
 
-_DOCUMENTS_DIR = Path(__file__).parent.parent.parent.parent / "documents"
+_STALE_AFTER_DAYS = 365
 
 
 def _do_fetch_and_index(ticker: str) -> tuple[str, str]:
@@ -23,6 +25,9 @@ def _do_fetch_and_index(ticker: str) -> tuple[str, str]:
     from edgar import Company, set_identity
 
     from clients.config import settings
+    from clients.database import get_db_session
+    from models.db import Filing, PageIndexRecord
+
     set_identity(settings.edgar_identity)
 
     company = Company(ticker)
@@ -33,26 +38,73 @@ def _do_fetch_and_index(ticker: str) -> tuple[str, str]:
     period = filing.period_of_report
     filename = f"{ticker}_10-K_{period}.md"
 
-    client = get_pageindex_client()
-    existing_id = next(
-        (did for did, doc in client.documents.items() if doc.get("doc_name") == filename),
-        None,
-    )
-    if existing_id:
-        logger.info("filings: cache hit %s -> %s", filename, existing_id)
-        return existing_id, period
+    # DB-first cache check with staleness guard
+    with get_db_session() as session:
+        db_filing = (
+            session.query(Filing)
+            .filter_by(ticker=ticker, form_type="10-K")
+            .order_by(Filing.period.desc())
+            .first()
+        )
+        if db_filing is not None:
+            age = (date.today() - db_filing.period).days
+            if age <= _STALE_AFTER_DAYS:
+                pi_row = session.query(PageIndexRecord).filter_by(filing_id=db_filing.id).first()
+                if pi_row is not None:
+                    logger.info(
+                        "filings: DB cache hit %s (period=%s, age=%d days)",
+                        ticker, db_filing.period, age,
+                    )
+                    client = get_pageindex_client()
+                    if pi_row.doc_id not in client.documents:
+                        client._hydrate_single_from_db(pi_row.doc_id)
+                    return pi_row.doc_id, str(db_filing.period)
+            else:
+                logger.info(
+                    "filings: DB cache stale for %s (period=%s, age=%d days), re-fetching",
+                    ticker, db_filing.period, age,
+                )
 
     logger.info("filings: fetching %s 10-K via EDGAR (period=%s)", ticker, period)
     md_content = filing.markdown()
 
-    _DOCUMENTS_DIR.mkdir(parents=True, exist_ok=True)
-    dest = _DOCUMENTS_DIR / filename
-    dest.write_text(md_content, encoding="utf-8")
-    logger.info("filings: saved %s (%d chars)", filename, len(md_content))
+    from clients.storage import ensure_bucket, upload_filing
+    ensure_bucket()
+    s3_key = upload_filing(ticker, filename, md_content)
+    period_date = date.fromisoformat(str(period))
+    
+    with get_db_session() as session:
+        db_filing = (
+            session.query(Filing)
+            .filter_by(ticker=ticker, form_type="10-K", period=period_date)
+            .first()
+        )
+        if db_filing is not None:
+            db_filing.doc_name = filename
+            db_filing.content_s3_key = s3_key
+        else:
+            session.add(Filing(
+                ticker=ticker,
+                form_type="10-K",
+                period=period_date,
+                fiscal_year=period_date.year,
+                fiscal_quarter=4,
+                doc_name=filename,
+                content_s3_key=s3_key,
+            ))
 
-    doc_id = client.index(str(dest))
+    # Write to a temp file for PageIndex (content lives in inline structure after indexing).
+    # Use the canonical filename so PageIndex derives doc_name from it (it strips the
+    # extension off the basename) - this is what _persist_index_to_db matches against
+    # Filing.doc_name to resolve the filing_id FK.
+    client = get_pageindex_client()
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tmp_path = str(Path(tmp_dir) / filename)
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            f.write(md_content)
+        doc_id = client.index(tmp_path)
     logger.info("filings: indexed %s -> doc_id=%s", filename, doc_id)
-    return doc_id, period
+    return doc_id, str(period)
 
 
 @tool
