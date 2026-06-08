@@ -40,23 +40,25 @@ New package alongside `agents/`, `clients/`, etc.
 | Event | Emitted when | Payload |
 |---|---|---|
 | `run_started` | run begins | `{"query": str}` |
-| `subagent_started` | `on_tool_start` where the tool name is `task` (DeepAgents' subagent-dispatch mechanism — confirmed in `deepagents/middleware/async_subagents.py`) and the input identifies the subagent | `{"name": str}` (e.g. `"market_data"`) |
-| `subagent_completed` | matching `on_tool_end` for that dispatch | `{"name": str, "duration_s": float}` |
-| `report_chunk` | `on_chat_model_stream` originating from the **orchestrator's own** model — filtered by run name/tags so subagent-internal token streams (their own LLM calls, summarizers, judges) are not leaked into the UI | `{"text": str}` |
+| `subagent_started` | `on_tool_start` where the tool name is `task` (DeepAgents' subagent-dispatch mechanism) and the input identifies the subagent | `{"id": str, "name": str}` (e.g. `"market_data"`) |
+| `subagent_completed` | matching `on_tool_end` for that dispatch | `{"id": str, "name": str, "duration_s": float}` |
+| `report_chunk` | `on_chat_model_stream` originating from the **orchestrator's own** model — filtered by `metadata.lc_agent_name == "Grove"` so subagent-internal token streams (their own LLM calls, summarizers, judges) are not leaked into the UI | `{"text": str}` |
 | `run_completed` | run finishes successfully | `{}` |
 | `error` | an exception propagates out of the run | `{"message": str}` |
 
 This produces exactly the granularity decided on for orchestrator runs: subagent-level progress (not individual tool calls inside each subagent — Tavily searches, yfinance lookups, PageIndex reads stay hidden) plus the final synthesized report streaming token-by-token.
 
-**Filtering orchestrator vs. subagent model streams**: `astream_events` tags/names events with the run hierarchy, so `report_chunk` events are distinguished from a subagent's internal generation by checking the event's parent run corresponds to the orchestrator's own model node, not a `task` tool's nested graph run. This needs to be verified empirically against the actual event shapes DeepAgents/LangGraph produce — the implementation plan should include a quick exploratory script that prints raw `astream_events` output for a sample query before wiring up the filter logic.
+The `id` field is the underlying event's `run_id` (a unique string per tool invocation), passed straight through. It's needed because the same subagent can be dispatched more than once in a single run (e.g. a comparison query calls `market_data` once per ticker) — without a correlation id, the TUI couldn't tell two concurrent or sequential invocations of the same subagent apart, or pair each `_started` with the right `_completed`.
+
+**Verified empirically** (via a probe script run against a live query): `on_tool_start`/`on_tool_end` events for the `task` tool carry `data["input"] = {"subagent_type": "market_data", "description": "..."}`, and `metadata["lc_agent_name"]` is `"Grove"` for the orchestrator's own chat-model-stream events vs. `"{name}_subagent"` (e.g. `"news_macro_subagent"`) for nested subagent generations — confirming the filter approach above is reliable, not speculative.
 
 ### Event schema — `/runs/{subagent_name}` (direct subagent)
 
 | Event | Emitted when | Payload |
 |---|---|---|
 | `run_started` | run begins | `{"query": str, "subagent": str}` |
-| `tool_started` | `on_tool_start` for any tool the subagent calls (e.g. `fetch_and_index_filing`, `pageindex_get_structure`, `tavily_news_search`, `yfinance_get_market_data`) | `{"tool": str, "input": dict}` |
-| `tool_completed` | matching `on_tool_end` | `{"tool": str, "duration_s": float}` |
+| `tool_started` | `on_tool_start` for any tool the subagent calls (e.g. `fetch_and_index_filing`, `pageindex_get_structure`, `tavily_news_search`, `yfinance_get_market_data` — including deepagents' built-in filesystem tools like `read_file`, since Claude Code surfaces its own internal tool calls the same way) | `{"id": str, "tool": str, "input": dict}` |
+| `tool_completed` | matching `on_tool_end` | `{"id": str, "tool": str, "duration_s": float}` |
 | `report_chunk` | `on_chat_model_stream` from the subagent's own model (no nested-agent filtering needed here — there's only one agent) | `{"text": str}` |
 | `run_completed` | run finishes successfully | `{}` |
 | `error` | an exception propagates out of the run | `{"message": str}` |
