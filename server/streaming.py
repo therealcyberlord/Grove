@@ -25,7 +25,7 @@ async def translate_orchestrator_events(query: str, events: AsyncIterator[Stream
                 yield {"event": "subagent_started", "data": {"id": run_id, "name": subagent_name}}
             elif event_type == "on_tool_end" and name == "task":
                 subagent_name = data["input"]["subagent_type"]
-                duration_s = time.monotonic() - started_at.pop(run_id)
+                duration_s = time.monotonic() - started_at.pop(run_id, time.monotonic())
                 yield {"event": "subagent_completed", "data": {"id": run_id, "name": subagent_name, "duration_s": round(duration_s, 1)}}
             elif event_type == "on_chat_model_stream" and (ev.get("metadata") or {}).get("lc_agent_name") == "Grove":
                 text = data["chunk"].text
@@ -49,9 +49,9 @@ async def translate_subagent_events(query: str, subagent_name: str, events: Asyn
 
             if event_type == "on_tool_start":
                 started_at[run_id] = time.monotonic()
-                yield {"event": "tool_started", "data": {"id": run_id, "tool": name, "input": data.get("input", {})}}
+                yield {"event": "tool_started", "data": {"id": run_id, "tool": name, "input": data["input"]}}
             elif event_type == "on_tool_end":
-                duration_s = time.monotonic() - started_at.pop(run_id)
+                duration_s = time.monotonic() - started_at.pop(run_id, time.monotonic())
                 yield {"event": "tool_completed", "data": {"id": run_id, "tool": name, "duration_s": round(duration_s, 1)}}
             elif event_type == "on_chat_model_stream":
                 text = data["chunk"].text

@@ -3,7 +3,7 @@ import asyncio
 
 from langchain_core.messages import AIMessageChunk
 
-from server.streaming import translate_orchestrator_events, translate_subagent_events
+from server.streaming import to_ndjson, translate_orchestrator_events, translate_subagent_events
 
 
 async def _fake_events(*events):
@@ -91,3 +91,15 @@ def test_translate_subagent_events_emits_error_event_on_exception():
     results = asyncio.run(_collect(translate_subagent_events("NVDA", "news_macro", _raising())))
 
     assert results[-1] == {"event": "error", "data": {"message": "subagent blew up"}}
+
+
+def test_to_ndjson_encodes_events_as_utf8_ndjson():
+    events = _fake_events(
+        {"event": "run_started", "data": {"query": "hello"}},
+        {"event": "run_completed", "data": {}},
+    )
+    lines = asyncio.run(_collect(to_ndjson(events)))
+    assert lines == [
+        b'{"event": "run_started", "data": {"query": "hello"}}\n',
+        b'{"event": "run_completed", "data": {}}\n',
+    ]
