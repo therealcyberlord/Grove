@@ -17,7 +17,7 @@ _SUBAGENTS = {subagent["name"]: subagent for subagent in (news_macro, market_dat
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(_app: FastAPI):
     init_db()
     ensure_bucket()
     yield
