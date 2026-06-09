@@ -29,12 +29,10 @@ class GroveApp(App):
         self._auto_scroll = True
         self._programmatic_scroll = False
 
-    def on_scroll(self, event: events.Scroll) -> None:
+    def on_mouse_scroll_up(self, event: events.MouseScrollUp) -> None:
         if self._programmatic_scroll:
             return
-        report_scroll = self.query_one("#report-scroll", VerticalScroll)
-        if event.widget is report_scroll and report_scroll.scroll_y < report_scroll.scroll_end_y:
-            self._auto_scroll = False
+        self._auto_scroll = False
 
     async def on_input_submitted(self, event: Input.Submitted) -> None:
         query = event.value.strip()
