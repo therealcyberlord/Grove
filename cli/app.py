@@ -73,12 +73,12 @@ class GroveApp(App):
 
         elif event_type == "subagent_started":
             data = event["data"]
-            item = activity.start_item(f"◐ {data['name']}...")
+            item = activity.start_item(f"{data['name']}...")
             self._items_by_id[data["id"]] = item
 
         elif event_type == "tool_started":
             data = event["data"]
-            label = f"◐ {data['tool']}..."
+            label = f"{data['tool']}..."
             if "subagent" in data:
                 item = activity.start_nested_item(label)
             else:

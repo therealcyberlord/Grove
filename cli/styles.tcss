@@ -38,4 +38,5 @@ Footer {
 
 .nested {
     color: #6a9f6a;
+    padding-left: 2;
 }
