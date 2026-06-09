@@ -1,11 +1,32 @@
 from textual import events, work
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, VerticalScroll
-from textual.widgets import Footer, Header, Input, Markdown
+from textual.widgets import Footer, Header, Input, Markdown, Static
 
 from cli.client import GroveClient
 from cli.commands import SUBAGENT_NAMES, parse_input
 from cli.widgets import ActivityItem, ActivityLog
+
+
+_WELCOME_MD = """\
+**Ready — 3 subagents available**
+
+orchestrator → news\\_macro · market\\_data · filings
+
+---
+
+**Model:** DeepSeek V4 Pro (via OpenRouter) &nbsp;&nbsp; **Date:** {date}
+
+---
+
+**Try asking:**
+
+- What is the sentiment for CELH?
+- Give me a deep dive on NVDA
+- Compare AAPL vs MSFT
+
+Or target a subagent directly: `/news_macro` `/market_data` `/filings`
+"""
 
 
 class GroveApp(App):
@@ -27,11 +48,21 @@ class GroveApp(App):
         yield Input(placeholder="Ask a question, or /filings NVDA...", id="prompt")
         yield Footer()
 
-    def on_mount(self) -> None:
+    async def on_mount(self) -> None:
         self._items_by_id = {}
         self._subagent_last_child = {}
         self._auto_scroll = True
         self._programmatic_scroll = False
+        await self._show_welcome()
+
+    async def _show_welcome(self) -> None:
+        from datetime import date
+        activity = self.query_one("#sidebar", ActivityLog)
+        activity.mount(Static("Subagents ready", classes="ready-heading"))
+        for name in ("news_macro", "market_data", "filings"):
+            activity.mount(Static(f"● {name}", classes="ready-item"))
+        report = self.query_one("#report", Markdown)
+        await report.update(_WELCOME_MD.format(date=date.today().isoformat()))
 
     def on_mouse_scroll_up(self, event: events.MouseScrollUp) -> None:
         if self._programmatic_scroll:
