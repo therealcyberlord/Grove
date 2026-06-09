@@ -1,8 +1,6 @@
-"""Grove TUI - a Claude Code-style terminal client for the Grove research backend."""
-import httpx
-from textual import work
+from textual import events, work
 from textual.app import App, ComposeResult
-from textual.containers import Horizontal, Vertical
+from textual.containers import Horizontal, VerticalScroll
 from textual.widgets import Footer, Header, Input, Markdown
 
 from cli.client import GroveClient
@@ -11,83 +9,105 @@ from cli.widgets import ActivityItem, ActivityLog
 
 
 class GroveApp(App):
-    """Split-panel terminal client: activity sidebar + streaming report pane + input bar."""
+    CSS_PATH = "cli/styles.tcss"
 
-    CSS_PATH = "styles.tcss"
-    TITLE = "Grove"
-
-    def __init__(self) -> None:
-        super().__init__()
-        self._client = GroveClient()
-        self._items_by_id: dict[str, ActivityItem] = {}
+    _items_by_id: dict[str, ActivityItem]
+    _auto_scroll: bool
+    _programmatic_scroll: bool
 
     def compose(self) -> ComposeResult:
         yield Header()
         with Horizontal(id="body"):
-            yield ActivityLog(id="activity")
-            with Vertical(id="main"):
+            yield ActivityLog(id="sidebar")
+            with VerticalScroll(id="report-scroll"):
                 yield Markdown(id="report")
-        yield Input(placeholder="Ask a question, or /filings NVDA, /market_data NVDA, /news_macro NVDA", id="prompt")
+        yield Input(placeholder="Ask a question, or /filings NVDA...", id="prompt")
         yield Footer()
 
     def on_mount(self) -> None:
-        self.query_one("#prompt", Input).focus()
+        self._items_by_id = {}
+        self._auto_scroll = True
+        self._programmatic_scroll = False
 
-    def on_input_submitted(self, message: Input.Submitted) -> None:
-        text = message.value.strip()
-        if not text:
+    def on_scroll(self, event: events.Scroll) -> None:
+        if self._programmatic_scroll:
             return
-        prompt = self.query_one("#prompt", Input)
-        prompt.value = ""
-        self.run_query(text)
+        report_scroll = self.query_one("#report-scroll", VerticalScroll)
+        if event.widget is report_scroll and report_scroll.scroll_y < report_scroll.scroll_end_y:
+            self._auto_scroll = False
+
+    async def on_input_submitted(self, event: Input.Submitted) -> None:
+        query = event.value.strip()
+        if not query:
+            return
+        event.input.clear()
+        self.run_query(query)
 
     @work(exclusive=True)
     async def run_query(self, text: str) -> None:
-        prompt = self.query_one("#prompt", Input)
-        activity = self.query_one(ActivityLog)
-        report = self.query_one("#report", Markdown)
-
-        prompt.disabled = True
-        activity.reset()
-        await report.update("")
         self._items_by_id = {}
+        self._auto_scroll = True
+        report_scroll = self.query_one("#report-scroll", VerticalScroll)
+        self._programmatic_scroll = True
+        report_scroll.scroll_home(animate=False)
+        self._programmatic_scroll = False
 
         subagent_name, query = parse_input(text)
-        try:
-            if subagent_name is None:
-                activity.add_note("routing query...")
-                stream = self._client.stream_run(query)
-            elif subagent_name in SUBAGENT_NAMES:
-                stream = self._client.stream_subagent_run(subagent_name, query)
+        client = GroveClient()
+        if subagent_name in SUBAGENT_NAMES:
+            stream = client.stream_subagent_run(subagent_name, query)
+        else:
+            stream = client.stream_run(query)
+
+        async for event in stream:
+            await self._apply_event(event)
+
+    async def _apply_event(self, event: dict) -> None:
+        activity = self.query_one("#sidebar", ActivityLog)
+        event_type = event["event"]
+
+        if event_type == "run_started":
+            activity.clear_items()
+            report = self.query_one("#report", Markdown)
+            await report.update("")
+
+        elif event_type == "subagent_started":
+            data = event["data"]
+            item = activity.start_item(f"◐ {data['name']}...")
+            self._items_by_id[data["id"]] = item
+
+        elif event_type == "tool_started":
+            data = event["data"]
+            label = f"◐ {data['tool']}..."
+            if "subagent" in data:
+                item = activity.start_nested_item(label)
             else:
-                activity.add_note(f"✗ Unknown command: /{subagent_name}")
-                return
+                item = activity.start_item(label)
+            self._items_by_id[data["id"]] = item
 
-            async for event in stream:
-                await self._apply_event(event, activity, report)
-        except httpx.HTTPError as exc:
-            activity.add_note(f"✗ Connection error: {exc}")
-        finally:
-            prompt.disabled = False
-            prompt.focus()
+        elif event_type in ("subagent_completed", "tool_completed"):
+            data = event["data"]
+            item = self._items_by_id.pop(data["id"], None)
+            if item:
+                display_name = data.get("name") or data.get("tool")
+                item.mark_done(f"✓ {display_name} ({data['duration_s']}s)")
 
-    async def _apply_event(self, event: dict, activity: ActivityLog, report: Markdown) -> None:
-        kind = event.get("event")
-        data = event.get("data", {})
+        elif event_type == "report_chunk":
+            report = self.query_one("#report", Markdown)
+            await report.append(event["data"]["text"])
+            if self._auto_scroll:
+                report_scroll = self.query_one("#report-scroll", VerticalScroll)
+                self._programmatic_scroll = True
+                report_scroll.scroll_end(animate=False)
+                self._programmatic_scroll = False
 
-        if kind in ("subagent_started", "tool_started"):
-            label = data.get("name") or data.get("tool")
-            self._items_by_id[data["id"]] = activity.start_item(label)
-        elif kind in ("subagent_completed", "tool_completed"):
-            item = self._items_by_id.get(data["id"])
-            if item is not None:
-                item.mark_done(data["duration_s"])
-        elif kind == "report_chunk":
-            await report.append(data["text"])
-        elif kind == "error":
-            activity.add_note(f"✗ {data['message']}")
+        elif event_type == "error":
             for item in self._items_by_id.values():
-                item.mark_interrupted()
+                item.mark_done("✗ interrupted")
+            self._items_by_id = {}
+
+        elif event_type == "run_completed":
+            pass
 
 
 def main() -> None:

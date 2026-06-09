@@ -15,10 +15,9 @@ class ActivityItem(Static):
         self._elapsed: float | None = None
         self._refresh_content()
 
-    def mark_done(self, elapsed: float) -> None:
+    def mark_done(self, label: str) -> None:
         self._status = "done"
-        self._elapsed = elapsed
-        self._refresh_content()
+        self.update(label)
 
     def mark_interrupted(self) -> None:
         if self._status == "running":
@@ -27,14 +26,13 @@ class ActivityItem(Static):
 
     def _refresh_content(self) -> None:
         icon = _ICONS[self._status]
-        suffix = f" ({self._elapsed:.1f}s)" if self._elapsed is not None else "..."
-        self.update(f"{icon} {self._label}{suffix}")
+        self.update(f"{icon} {self._label}...")
 
 
 class ActivityLog(VerticalScroll):
     """Scrolling list of activity lines for the current run."""
 
-    def reset(self) -> None:
+    def clear_items(self) -> None:
         self.remove_children()
 
     def add_note(self, text: str) -> None:
