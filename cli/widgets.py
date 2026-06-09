@@ -2,31 +2,15 @@
 from textual.containers import VerticalScroll
 from textual.widgets import Static
 
-_ICONS = {"running": "◐", "done": "✓", "error": "✗"}
-
 
 class ActivityItem(Static):
-    """A single activity line: a label with a status icon and elapsed time once known."""
+    """A single activity line with a label."""
 
     def __init__(self, label: str, classes: str = "") -> None:
-        super().__init__(classes=classes)
-        self._label = label
-        self._status = "running"
-        self._elapsed: float | None = None
-        self._refresh_content()
+        super().__init__(label, classes=classes)
 
     def mark_done(self, label: str) -> None:
-        self._status = "done"
         self.update(label)
-
-    def mark_interrupted(self) -> None:
-        if self._status == "running":
-            self._status = "error"
-            self._refresh_content()
-
-    def _refresh_content(self) -> None:
-        icon = _ICONS[self._status]
-        self.update(f"{icon} {self._label}...")
 
 
 class ActivityLog(VerticalScroll):
