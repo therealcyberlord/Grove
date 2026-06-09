@@ -5,7 +5,7 @@ from textual.widgets import Footer, Input, Markdown, Static
 
 from cli.client import GroveClient
 from cli.commands import SUBAGENT_NAMES, parse_input
-from cli.widgets import ActivityItem, ActivityLog
+from cli.widgets import ActivityItem, ActivityLog, CommandInput, CommandSuggestions
 
 
 _WELCOME_MD = """\
@@ -43,7 +43,8 @@ class GroveApp(App):
             yield ActivityLog(id="sidebar")
             with VerticalScroll(id="report-scroll"):
                 yield Markdown(id="report")
-        yield Input(placeholder="Ask a question, or /filings NVDA...", id="prompt")
+        yield CommandSuggestions(id="command-suggestions")
+        yield CommandInput(placeholder="Ask a question, or call a subagent with a ticker: /filings NVDA", id="prompt")
         yield Footer()
 
     async def on_mount(self) -> None:
@@ -66,6 +67,16 @@ class GroveApp(App):
         if self._programmatic_scroll:
             return
         self._auto_scroll = False
+
+    def on_input_changed(self, event: Input.Changed) -> None:
+        if event.input.id != "prompt":
+            return
+        value = event.value
+        suggestions = self.query_one("#command-suggestions", CommandSuggestions)
+        if value.startswith("/") and " " not in value:
+            suggestions.show_for(value)
+        else:
+            suggestions.hide()
 
     async def on_input_submitted(self, event: Input.Submitted) -> None:
         query = event.value.strip()

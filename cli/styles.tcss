@@ -33,6 +33,13 @@ Footer {
     padding: 0 1;
 }
 
+#command-suggestions {
+    background: #1b2e1e;
+    border: solid #388e3c;
+    padding: 0 1;
+    height: auto;
+}
+
 #prompt {
     background: #0d150f;
     border-top: tall #388e3c;
