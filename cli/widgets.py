@@ -56,8 +56,8 @@ class ActivityLog(VerticalScroll):
 
 
 class CommandSuggestions(Static):
-    def __init__(self) -> None:
-        super().__init__()
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
         self._selected = 0
         self._filtered: list[tuple[str, str]] = []
         self.display = False
