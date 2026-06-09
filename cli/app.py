@@ -1,7 +1,7 @@
 from textual import events, work
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, VerticalScroll
-from textual.widgets import Footer, Header, Input, Markdown, Static
+from textual.widgets import Footer, Input, Markdown, Static
 
 from cli.client import GroveClient
 from cli.commands import SUBAGENT_NAMES, parse_input
@@ -31,8 +31,6 @@ Or target a subagent directly: `/news_macro` `/market_data` `/filings`
 
 class GroveApp(App):
     CSS_PATH = "styles.tcss"
-    TITLE = "⬡ Grove"
-    SUB_TITLE = "Analyst's CLI"
 
     _items_by_id: dict[str, ActivityItem]
     _auto_scroll: bool
@@ -40,7 +38,7 @@ class GroveApp(App):
     _subagent_last_child: dict[str, ActivityItem]
 
     def compose(self) -> ComposeResult:
-        yield Header()
+        yield Static("[bold #81c784]⬡ Grove[/]  [#6a9f6a]Analyst's CLI[/]", id="app-header")
         with Horizontal(id="body"):
             yield ActivityLog(id="sidebar")
             with VerticalScroll(id="report-scroll"):

@@ -3,9 +3,11 @@ Screen {
     color: #c8e6c9;
 }
 
-Header {
+#app-header {
     background: #1b2e1e;
-    color: #81c784;
+    height: 1;
+    dock: top;
+    padding: 0 1;
     border-bottom: tall #388e3c;
 }
 
