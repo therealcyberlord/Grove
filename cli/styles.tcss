@@ -1,26 +1,41 @@
 Screen {
-    layout: vertical;
+    background: #111c14;
+    color: #c8e6c9;
+}
+
+Header {
+    background: #1b2e1e;
+    color: #81c784;
+    border-bottom: tall #388e3c;
+}
+
+Footer {
+    background: #1b2e1e;
+    color: #6a9f6a;
 }
 
 #body {
     height: 1fr;
 }
 
-#activity {
-    width: 36;
-    border-right: solid $primary-background;
-    padding: 1;
+#sidebar {
+    width: 28;
+    background: #1b2e1e;
+    border-right: tall #388e3c;
+    padding: 0 1;
 }
 
-#main {
+#report-scroll {
     width: 1fr;
-    padding: 1;
-}
-
-#report {
-    height: 1fr;
+    padding: 0 1;
 }
 
 #prompt {
-    dock: bottom;
+    background: #0d150f;
+    border-top: tall #388e3c;
+    color: #c8e6c9;
+}
+
+.nested {
+    color: #6a9f6a;
 }
