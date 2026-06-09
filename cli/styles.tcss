@@ -5,10 +5,11 @@ Screen {
 
 #app-header {
     background: #1b2e1e;
-    height: 1;
+    height: 2;
     dock: top;
     padding: 0 1;
     color: #c8e6c9;
+    border-bottom: solid #388e3c;
 }
 
 Footer {
