@@ -1,0 +1,26 @@
+Screen {
+    layout: vertical;
+}
+
+#body {
+    height: 1fr;
+}
+
+#activity {
+    width: 36;
+    border-right: solid $primary-background;
+    padding: 1;
+}
+
+#main {
+    width: 1fr;
+    padding: 1;
+}
+
+#report {
+    height: 1fr;
+}
+
+#prompt {
+    dock: bottom;
+}
