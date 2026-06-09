@@ -9,7 +9,7 @@ from cli.widgets import ActivityItem, ActivityLog
 
 
 class GroveApp(App):
-    CSS_PATH = "cli/styles.tcss"
+    CSS_PATH = "styles.tcss"
 
     _items_by_id: dict[str, ActivityItem]
     _auto_scroll: bool
