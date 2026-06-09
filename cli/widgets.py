@@ -19,9 +19,6 @@ class ActivityLog(VerticalScroll):
     def clear_items(self) -> None:
         self.remove_children()
 
-    def add_note(self, text: str) -> None:
-        self.mount(Static(text))
-
     def start_item(self, label: str) -> ActivityItem:
         item = ActivityItem(label)
         self.mount(item)
