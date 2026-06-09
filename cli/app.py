@@ -16,6 +16,7 @@ class GroveApp(App):
     _items_by_id: dict[str, ActivityItem]
     _auto_scroll: bool
     _programmatic_scroll: bool
+    _subagent_last_child: dict[str, ActivityItem]
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -28,6 +29,7 @@ class GroveApp(App):
 
     def on_mount(self) -> None:
         self._items_by_id = {}
+        self._subagent_last_child = {}
         self._auto_scroll = True
         self._programmatic_scroll = False
 
@@ -46,6 +48,7 @@ class GroveApp(App):
     @work(exclusive=True)
     async def run_query(self, text: str) -> None:
         self._items_by_id = {}
+        self._subagent_last_child = {}
         self._auto_scroll = True
         report_scroll = self.query_one("#report-scroll", VerticalScroll)
         self._programmatic_scroll = True
@@ -75,12 +78,18 @@ class GroveApp(App):
             data = event["data"]
             item = activity.start_item(f"{data['name']}...")
             self._items_by_id[data["id"]] = item
+            self._subagent_last_child[data["name"]] = item
 
         elif event_type == "tool_started":
             data = event["data"]
             label = f"{data['tool']}..."
             if "subagent" in data:
-                item = activity.start_nested_item(label)
+                last = self._subagent_last_child.get(data["subagent"])
+                if last:
+                    item = activity.insert_nested_after(label, after=last)
+                else:
+                    item = activity.start_nested_item(label)
+                self._subagent_last_child[data["subagent"]] = item
             else:
                 item = activity.start_item(label)
             self._items_by_id[data["id"]] = item
