@@ -10,6 +10,8 @@ from cli.widgets import ActivityItem, ActivityLog
 
 class GroveApp(App):
     CSS_PATH = "styles.tcss"
+    TITLE = "⬡ Grove"
+    SUB_TITLE = "Analyst's CLI"
 
     _items_by_id: dict[str, ActivityItem]
     _auto_scroll: bool
