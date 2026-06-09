@@ -8,8 +8,8 @@ _ICONS = {"running": "◐", "done": "✓", "error": "✗"}
 class ActivityItem(Static):
     """A single activity line: a label with a status icon and elapsed time once known."""
 
-    def __init__(self, label: str) -> None:
-        super().__init__()
+    def __init__(self, label: str, classes: str = "") -> None:
+        super().__init__(classes=classes)
         self._label = label
         self._status = "running"
         self._elapsed: float | None = None
@@ -44,4 +44,9 @@ class ActivityLog(VerticalScroll):
         item = ActivityItem(label)
         self.mount(item)
         item.scroll_visible()
+        return item
+
+    def start_nested_item(self, label: str) -> ActivityItem:
+        item = ActivityItem(f"  {label}", classes="nested")
+        self.mount(item)
         return item
