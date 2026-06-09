@@ -33,6 +33,16 @@ def _chunk_event(run_id, text, lc_agent_name):
     }
 
 
+def _nested_tool_event(event_type: str, name: str, run_id: str, lc_agent_name: str, **data_kwargs) -> dict:
+    return {
+        "event": event_type,
+        "name": name,
+        "run_id": run_id,
+        "metadata": {"lc_agent_name": lc_agent_name},
+        "data": data_kwargs,
+    }
+
+
 def test_translate_orchestrator_events_tracks_subagent_dispatch_and_report():
     events = _fake_events(
         _tool_event("on_tool_start", "task", "r1", subagent_type="market_data"),
@@ -103,3 +113,32 @@ def test_to_ndjson_encodes_events_as_utf8_ndjson():
         b'{"event": "run_started", "data": {"query": "hello"}}\n',
         b'{"event": "run_completed", "data": {}}\n',
     ]
+
+
+def test_translate_orchestrator_events_emits_tool_events_for_nested_subagent_tools():
+    run_id = "tool-run-1"
+    events = [
+        _nested_tool_event("on_tool_start", "tavily_news_search", run_id, "news_macro_subagent", input={"query": "AAPL news"}),
+        _nested_tool_event("on_tool_end", "tavily_news_search", run_id, "news_macro_subagent", input={"query": "AAPL news"}, output="results"),
+    ]
+    result = asyncio.run(_collect(translate_orchestrator_events("q", _fake_events(*events))))
+    tool_started = next(e for e in result if e["event"] == "tool_started")
+    tool_completed = next(e for e in result if e["event"] == "tool_completed")
+    assert tool_started["data"]["tool"] == "tavily_news_search"
+    assert tool_started["data"]["subagent"] == "news_macro"
+    assert tool_started["data"]["id"] == run_id
+    assert tool_started["data"]["input"] == {"query": "AAPL news"}
+    assert tool_completed["data"]["tool"] == "tavily_news_search"
+    assert tool_completed["data"]["subagent"] == "news_macro"
+    assert tool_completed["data"]["id"] == run_id
+    assert tool_completed["data"]["duration_s"] >= 0.0
+
+
+def test_translate_orchestrator_events_ignores_tool_events_without_subagent_suffix():
+    run_id = "tool-run-2"
+    events = [
+        _nested_tool_event("on_tool_start", "some_tool", run_id, "Grove"),
+        _nested_tool_event("on_tool_end", "some_tool", run_id, "Grove", input={}, output=""),
+    ]
+    result = asyncio.run(_collect(translate_orchestrator_events("q", _fake_events(*events))))
+    assert not any(e["event"] in ("tool_started", "tool_completed") for e in result)

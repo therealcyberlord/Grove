@@ -14,11 +14,12 @@ async def translate_orchestrator_events(query: str, events: AsyncIterator[Stream
     started_at: dict[str, float] = {}
     try:
         async for ev in events:
-            event_type = ev.get("event")
-            name = ev.get("name")
-            run_id = ev.get("run_id")
+            event_type = ev["event"]
+            name = ev["name"]
+            run_id = ev["run_id"]
             data = ev.get("data") or {}
-
+            metadata = ev.get("metadata") or {}
+            lc_agent_name = metadata.get("lc_agent_name", "")
             if event_type == "on_tool_start" and name == "task":
                 subagent_name = data["input"]["subagent_type"]
                 started_at[run_id] = time.monotonic()
@@ -27,7 +28,15 @@ async def translate_orchestrator_events(query: str, events: AsyncIterator[Stream
                 subagent_name = data["input"]["subagent_type"]
                 duration_s = time.monotonic() - started_at.pop(run_id, time.monotonic())
                 yield {"event": "subagent_completed", "data": {"id": run_id, "name": subagent_name, "duration_s": round(duration_s, 1)}}
-            elif event_type == "on_chat_model_stream" and (ev.get("metadata") or {}).get("lc_agent_name") == "Grove":
+            elif event_type == "on_tool_start" and name != "task" and lc_agent_name.endswith("_subagent"):
+                subagent = lc_agent_name.removesuffix("_subagent")
+                started_at[run_id] = time.monotonic()
+                yield {"event": "tool_started", "data": {"id": run_id, "tool": name, "subagent": subagent, "input": data["input"]}}
+            elif event_type == "on_tool_end" and name != "task" and lc_agent_name.endswith("_subagent"):
+                subagent = lc_agent_name.removesuffix("_subagent")
+                duration_s = time.monotonic() - started_at.pop(run_id, time.monotonic())
+                yield {"event": "tool_completed", "data": {"id": run_id, "tool": name, "subagent": subagent, "duration_s": round(duration_s, 1)}}
+            elif event_type == "on_chat_model_stream" and lc_agent_name == "Grove":
                 text = data["chunk"].text
                 if text:
                     yield {"event": "report_chunk", "data": {"text": text}}
@@ -42,9 +51,9 @@ async def translate_subagent_events(query: str, subagent_name: str, events: Asyn
     started_at: dict[str, float] = {}
     try:
         async for ev in events:
-            event_type = ev.get("event")
-            name = ev.get("name")
-            run_id = ev.get("run_id")
+            event_type = ev["event"]
+            name = ev["name"]
+            run_id = ev["run_id"]
             data = ev.get("data") or {}
 
             if event_type == "on_tool_start":
