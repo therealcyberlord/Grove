@@ -36,6 +36,12 @@ async def translate_orchestrator_events(query: str, events: AsyncIterator[Stream
                 subagent = lc_agent_name.removesuffix("_subagent")
                 duration_s = time.monotonic() - started_at.pop(run_id, time.monotonic())
                 yield {"event": "tool_completed", "data": {"id": run_id, "tool": name, "subagent": subagent, "duration_s": round(duration_s, 1)}}
+            elif event_type == "on_tool_start" and name != "task" and lc_agent_name == "Grove":
+                started_at[run_id] = time.monotonic()
+                yield {"event": "tool_started", "data": {"id": run_id, "tool": name, "input": data["input"]}}
+            elif event_type == "on_tool_end" and name != "task" and lc_agent_name == "Grove":
+                duration_s = time.monotonic() - started_at.pop(run_id, time.monotonic())
+                yield {"event": "tool_completed", "data": {"id": run_id, "tool": name, "duration_s": round(duration_s, 1)}}
             elif event_type == "on_chat_model_stream" and lc_agent_name == "Grove":
                 text = data["chunk"].text
                 if text:

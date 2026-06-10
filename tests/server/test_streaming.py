@@ -134,11 +134,18 @@ def test_translate_orchestrator_events_emits_tool_events_for_nested_subagent_too
     assert tool_completed["data"]["duration_s"] >= 0.0
 
 
-def test_translate_orchestrator_events_ignores_tool_events_without_subagent_suffix():
+def test_translate_orchestrator_events_emits_tool_events_for_orchestrator_tools():
     run_id = "tool-run-2"
     events = [
-        _nested_tool_event("on_tool_start", "some_tool", run_id, "Grove"),
-        _nested_tool_event("on_tool_end", "some_tool", run_id, "Grove", input={}, output=""),
+        _nested_tool_event("on_tool_start", "ticker_lookup", run_id, "Grove", input={"query": "Apple Inc"}),
+        _nested_tool_event("on_tool_end", "ticker_lookup", run_id, "Grove", input={"query": "Apple Inc"}, output="AAPL"),
     ]
     result = asyncio.run(_collect(translate_orchestrator_events("q", _fake_events(*events))))
-    assert not any(e["event"] in ("tool_started", "tool_completed") for e in result)
+    tool_started = next(e for e in result if e["event"] == "tool_started")
+    tool_completed = next(e for e in result if e["event"] == "tool_completed")
+    assert tool_started["data"]["tool"] == "ticker_lookup"
+    assert tool_started["data"]["id"] == run_id
+    assert "subagent" not in tool_started["data"]
+    assert tool_completed["data"]["tool"] == "ticker_lookup"
+    assert tool_completed["data"]["id"] == run_id
+    assert tool_completed["data"]["duration_s"] >= 0.0
