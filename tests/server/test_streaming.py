@@ -150,3 +150,30 @@ def test_translate_orchestrator_events_emits_tool_events_for_orchestrator_tools(
     assert tool_completed["data"]["tool"] == "ticker_lookup"
     assert tool_completed["data"]["id"] == run_id
     assert tool_completed["data"]["duration_s"] >= 0.0
+
+
+def test_translate_orchestrator_events_handles_orchestrator_tool_followed_by_subagent_tool():
+    orch_run_id = "orch-tool-1"
+    sub_run_id = "sub-tool-1"
+    events = [
+        _nested_tool_event("on_tool_start", "ticker_lookup", orch_run_id, "Grove", input={"query": "Apple Inc"}),
+        _nested_tool_event("on_tool_end", "ticker_lookup", orch_run_id, "Grove", input={"query": "Apple Inc"}, output="AAPL"),
+        _nested_tool_event("on_tool_start", "tavily_news_search", sub_run_id, "news_macro_subagent", input={"query": "AAPL"}),
+        _nested_tool_event("on_tool_end", "tavily_news_search", sub_run_id, "news_macro_subagent", input={"query": "AAPL"}, output="results"),
+    ]
+    result = asyncio.run(_collect(translate_orchestrator_events("q", _fake_events(*events))))
+
+    tool_started_events = [e for e in result if e["event"] == "tool_started"]
+    tool_completed_events = [e for e in result if e["event"] == "tool_completed"]
+
+    assert len(tool_started_events) == 2
+    assert len(tool_completed_events) == 2
+
+    orch_started = next(e for e in tool_started_events if e["data"]["tool"] == "ticker_lookup")
+    sub_started = next(e for e in tool_started_events if e["data"]["tool"] == "tavily_news_search")
+
+    assert "subagent" not in orch_started["data"]
+    assert orch_started["data"]["id"] == orch_run_id
+
+    assert sub_started["data"]["subagent"] == "news_macro"
+    assert sub_started["data"]["id"] == sub_run_id

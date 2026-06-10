@@ -62,13 +62,13 @@ class GroveApp(App):
         activity = self.query_one("#sidebar", ActivityLog)
         activity.mount(Static("Subagents ready", classes="ready-heading"))
         for name in ("news_macro", "market_data", "filings"):
-            activity.mount(Static(f"● {name}", classes="ready-item"))
+            activity.mount(Static(f"● {subagent_label(name)}", classes="ready-item"))
         report = self.query_one("#report", Markdown)
         await report.update(_WELCOME_MD.format(date=date.today().isoformat()))
 
-    def _dismiss_thinking(self) -> None:
+    async def _dismiss_thinking(self) -> None:
         if self._thinking_item is not None:
-            self._thinking_item.remove()
+            await self._thinking_item.remove()
             self._thinking_item = None
 
     def on_mouse_scroll_up(self, event: events.MouseScrollUp) -> None:
@@ -125,7 +125,7 @@ class GroveApp(App):
             self._thinking_item = activity.start_item("Thinking...")
 
         elif event_type == "subagent_started":
-            self._dismiss_thinking()
+            await self._dismiss_thinking()
             data = event["data"]
             label = subagent_label(data["name"])
             item = activity.start_item(f"{label}...")
@@ -133,7 +133,7 @@ class GroveApp(App):
             self._subagent_last_child[data["name"]] = item
 
         elif event_type == "tool_started":
-            self._dismiss_thinking()
+            await self._dismiss_thinking()
             data = event["data"]
             label = tool_label(data["tool"])
             display = f"{label}..."
@@ -159,7 +159,7 @@ class GroveApp(App):
                 item.mark_done(f"✓ {friendly} ({data['duration_s']}s)")
 
         elif event_type == "report_chunk":
-            self._dismiss_thinking()
+            await self._dismiss_thinking()
             report = self.query_one("#report", Markdown)
             await report.append(event["data"]["text"])
             if self._auto_scroll:
@@ -169,13 +169,13 @@ class GroveApp(App):
                 self._programmatic_scroll = False
 
         elif event_type == "error":
-            self._dismiss_thinking()
+            await self._dismiss_thinking()
             for item in self._items_by_id.values():
                 item.mark_done("✗ interrupted")
             self._items_by_id = {}
 
         elif event_type == "run_completed":
-            self._dismiss_thinking()
+            await self._dismiss_thinking()
 
 
 def main() -> None:
