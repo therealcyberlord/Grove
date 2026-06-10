@@ -146,6 +146,7 @@ def test_translate_orchestrator_events_emits_tool_events_for_orchestrator_tools(
     assert tool_started["data"]["tool"] == "ticker_lookup"
     assert tool_started["data"]["id"] == run_id
     assert "subagent" not in tool_started["data"]
+    assert tool_started["data"]["input"] == {"query": "Apple Inc"}
     assert tool_completed["data"]["tool"] == "ticker_lookup"
     assert tool_completed["data"]["id"] == run_id
     assert tool_completed["data"]["duration_s"] >= 0.0
