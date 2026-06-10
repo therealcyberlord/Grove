@@ -5,6 +5,7 @@ from textual.widgets import Footer, Input, Markdown, Static
 
 from cli.client import GroveClient
 from cli.commands import SUBAGENT_NAMES, parse_input
+from cli.labels import subagent_label, tool_label
 from cli.widgets import ActivityItem, ActivityLog, CommandInput, CommandSuggestions
 
 
@@ -36,6 +37,7 @@ class GroveApp(App):
     _auto_scroll: bool
     _programmatic_scroll: bool
     _subagent_last_child: dict[str, ActivityItem]
+    _thinking_item: ActivityItem | None
 
     def compose(self) -> ComposeResult:
         yield Static("[bold #81c784]⬡ Grove[/]  [#6a9f6a]Analyst's CLI[/]", id="app-header")
@@ -52,6 +54,7 @@ class GroveApp(App):
         self._subagent_last_child = {}
         self._auto_scroll = True
         self._programmatic_scroll = False
+        self._thinking_item = None
         await self._show_welcome()
 
     async def _show_welcome(self) -> None:
@@ -62,6 +65,11 @@ class GroveApp(App):
             activity.mount(Static(f"● {name}", classes="ready-item"))
         report = self.query_one("#report", Markdown)
         await report.update(_WELCOME_MD.format(date=date.today().isoformat()))
+
+    def _dismiss_thinking(self) -> None:
+        if self._thinking_item is not None:
+            self._thinking_item.remove()
+            self._thinking_item = None
 
     def on_mouse_scroll_up(self, event: events.MouseScrollUp) -> None:
         if self._programmatic_scroll:
@@ -89,6 +97,7 @@ class GroveApp(App):
     async def run_query(self, text: str) -> None:
         self._items_by_id = {}
         self._subagent_last_child = {}
+        self._thinking_item = None
         self._auto_scroll = True
         report_scroll = self.query_one("#report-scroll", VerticalScroll)
         self._programmatic_scroll = True
@@ -113,33 +122,41 @@ class GroveApp(App):
             activity.clear_items()
             report = self.query_one("#report", Markdown)
             await report.update("")
+            self._thinking_item = activity.start_item("Thinking...")
 
         elif event_type == "subagent_started":
+            self._dismiss_thinking()
             data = event["data"]
-            item = activity.start_item(f"{data['name']}...")
+            label = subagent_label(data["name"])
+            item = activity.start_item(f"{label}...")
             self._items_by_id[data["id"]] = item
             self._subagent_last_child[data["name"]] = item
 
         elif event_type == "tool_started":
+            self._dismiss_thinking()
             data = event["data"]
-            label = f"{data['tool']}..."
+            label = tool_label(data["tool"])
+            display = f"{label}..."
             if "subagent" in data:
                 last = self._subagent_last_child.get(data["subagent"])
                 if last:
-                    item = activity.insert_nested_after(label, after=last)
+                    item = activity.insert_nested_after(display, after=last)
                 else:
-                    item = activity.start_nested_item(label)
+                    item = activity.start_nested_item(display)
                 self._subagent_last_child[data["subagent"]] = item
             else:
-                item = activity.start_item(label)
+                item = activity.start_item(display)
             self._items_by_id[data["id"]] = item
 
         elif event_type in ("subagent_completed", "tool_completed"):
             data = event["data"]
             item = self._items_by_id.pop(data["id"], None)
             if item:
-                display_name = data.get("name") or data.get("tool")
-                item.mark_done(f"✓ {display_name} ({data['duration_s']}s)")
+                if "name" in data:
+                    friendly = subagent_label(data["name"])
+                else:
+                    friendly = tool_label(data.get("tool", ""))
+                item.mark_done(f"✓ {friendly} ({data['duration_s']}s)")
 
         elif event_type == "report_chunk":
             report = self.query_one("#report", Markdown)
@@ -151,6 +168,7 @@ class GroveApp(App):
                 self._programmatic_scroll = False
 
         elif event_type == "error":
+            self._dismiss_thinking()
             for item in self._items_by_id.values():
                 item.mark_done("✗ interrupted")
             self._items_by_id = {}
