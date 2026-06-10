@@ -155,10 +155,11 @@ class GroveApp(App):
                 if "name" in data:
                     friendly = subagent_label(data["name"])
                 else:
-                    friendly = tool_label(data.get("tool", ""))
+                    friendly = tool_label(data.get("tool") or "unknown")
                 item.mark_done(f"✓ {friendly} ({data['duration_s']}s)")
 
         elif event_type == "report_chunk":
+            self._dismiss_thinking()
             report = self.query_one("#report", Markdown)
             await report.append(event["data"]["text"])
             if self._auto_scroll:
@@ -174,7 +175,7 @@ class GroveApp(App):
             self._items_by_id = {}
 
         elif event_type == "run_completed":
-            pass
+            self._dismiss_thinking()
 
 
 def main() -> None:
