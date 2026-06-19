@@ -42,6 +42,8 @@ synthesized markdown report with investment thesis and sources
 | Market data | yfinance |
 | SEC filings | edgartools + PageIndex |
 | Storage | PostgreSQL (filing metadata + index), S3/MinIO (filing markdown content) |
+| Server | FastAPI + uvicorn (NDJSON streaming) |
+| TUI | Textual (split-panel terminal app) |
 | Observability | Langfuse (optional) |
 | Runtime | Python 3.12+, uv |
 
@@ -109,12 +111,40 @@ PYTHONPATH=. uv run python scripts/seed_db.py
 
 ## Running
 
-MinIO isn't a persistent service - start it before running anything that touches filings or storage (data persists in `~/minio-data` between restarts). Use the same `<minio_user>` / `<minio_password>` you set up in step 4:
+MinIO isn't a persistent service — start it before running anything that touches filings or storage (data persists in `~/minio-data` between restarts):
 
 ```bash
 MINIO_ROOT_USER=<minio_user> MINIO_ROOT_PASSWORD=<minio_password> \
   minio server ~/minio-data --address ":9000" --console-address ":9001" &
 ```
+
+### TUI (recommended)
+
+Grove ships a split-panel terminal app: an activity sidebar showing live subagent and tool progress on the left, and the streaming report on the right.
+
+**Terminal 1 — start the API server:**
+
+```bash
+PYTHONPATH=. uv run uvicorn server.app:app --reload
+```
+
+**Terminal 2 — launch the TUI:**
+
+```bash
+uv run grove-tui
+```
+
+Type a question and press Enter, or call a subagent directly with a slash command:
+
+```
+/news_macro CELH
+/market_data NVDA
+/filings AAPL
+```
+
+Press `Ctrl+C` to exit.
+
+### Script runner
 
 ```bash
 # Full orchestrator (routes automatically based on query)
@@ -162,9 +192,20 @@ agents/
     analyzing-filings/      # Skill: SEC filing analysis workflow
     deep-dive-analysis/     # Skill: full deep-dive report workflow
     comparing-stocks/       # Skill: multi-ticker comparison workflow
-clients/                    # LLM, Tavily, Langfuse, PageIndex singletons
+cli/
+  app.py                    # Textual TUI app (split-panel layout, event dispatch)
+  client.py                 # Async httpx client for NDJSON streaming
+  commands.py               # Slash-command parser
+  labels.py                 # Human-readable tool and subagent display names
+  widgets.py                # ActivityItem spinner, ActivityLog, CommandSuggestions
+  styles.tcss               # Grove green theme
+clients/                    # LLM, Tavily, Langfuse, PageIndex, DB, S3 singletons
 evals/                      # Eval harness, datasets, and scorers (see evals/README.md)
 lib/PageIndex/              # Cloned from github.com/VectifyAI/PageIndex
+server/
+  app.py                    # FastAPI app with /runs and /runs/{subagent} endpoints
+  streaming.py              # astream_events → NDJSON translation layer
+  schemas.py                # RunRequest schema
 ```
 
 ## Adding a Subagent
@@ -172,3 +213,5 @@ lib/PageIndex/              # Cloned from github.com/VectifyAI/PageIndex
 1. Create `agents/subagents/<name>/` with `__init__.py`, `agent.py`, `system_prompt.py`
 2. Add shared tools to `agents/tools/`; subagent-specific tools go in `agent.py`
 3. Register in `orchestrator.py` and update the routing section of the orchestrator system prompt
+4. Register in `server/app.py` (`_SUBAGENTS` dict)
+5. Add display name and command description to `cli/labels.py` (`_SUBAGENT_LABELS` and `_SUBAGENT_COMMAND_DESCRIPTIONS`) — `SUBAGENT_NAMES` and the TUI command picker derive from these automatically
