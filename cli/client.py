@@ -24,7 +24,7 @@ class GroveClient:
             yield event
 
     async def _stream(self, path: str, query: str) -> AsyncIterator[dict[str, Any]]:
-        async with httpx.AsyncClient(timeout=None) as client:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(connect=10.0, read=120.0)) as client:
             async with client.stream("POST", f"{self._base_url}{path}", json={"query": query}) as response:
                 response.raise_for_status()
                 async for line in response.aiter_lines():
