@@ -26,17 +26,15 @@ class DBBackedPageIndexClient(PageIndexClient):
 
         doc_name = full_doc.get("doc_name", "")
 
-        if filing_id is None:
-            with get_db_session() as session:
+        with get_db_session() as session:
+            if session.query(PageIndexRecord).filter_by(doc_id=doc_id).first():
+                return
+            if filing_id is None:
                 doc_name_md = doc_name if doc_name.endswith(".md") else f"{doc_name}.md"
                 row = session.query(Filing).filter(
                     Filing.doc_name.in_([doc_name, doc_name_md])
                 ).first()
                 filing_id = row.id if row else None
-
-        with get_db_session() as session:
-            if session.query(PageIndexRecord).filter_by(doc_id=doc_id).first():
-                return
             structure_s3_key = upload_structure(doc_id, full_doc.get("structure", []))
             record = PageIndexRecord(
                 doc_id=doc_id,
@@ -58,17 +56,23 @@ class DBBackedPageIndexClient(PageIndexClient):
             record = session.query(PageIndexRecord).filter_by(doc_id=doc_id).first()
             if not record:
                 return
+            # Copy scalar fields before session closes (expire_on_commit=True would
+            # otherwise expire them, causing DetachedInstanceError on access outside).
+            structure_s3_key = record.structure_s3_key
+            doc_name = record.doc_name
+            doc_description = record.doc_description or ""
+            line_count = record.line_count
 
-        structure = download_structure(record.structure_s3_key)
+        structure = download_structure(structure_s3_key)
         full_doc = {
-            "id": record.doc_id,
+            "id": doc_id,
             "type": "md",
-            "doc_name": record.doc_name,
-            "doc_description": record.doc_description or "",
+            "doc_name": doc_name,
+            "doc_description": doc_description,
             "structure": structure,
         }
-        if record.line_count is not None:
-            full_doc["line_count"] = record.line_count
+        if line_count is not None:
+            full_doc["line_count"] = line_count
 
         if self.workspace:
             path = self.workspace / f"{doc_id}.json"
@@ -78,7 +82,7 @@ class DBBackedPageIndexClient(PageIndexClient):
 
         self.documents[doc_id] = self._make_meta_entry(full_doc)
         self.documents[doc_id]["id"] = doc_id
-        logger.info("pageindex: hydrated %s (%s) from DB", doc_id, record.doc_name)
+        logger.info("pageindex: hydrated %s (%s) from DB", doc_id, doc_name)
 
     def _load_workspace(self):
         super()._load_workspace()
