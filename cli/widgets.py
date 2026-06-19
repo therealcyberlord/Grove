@@ -3,12 +3,13 @@ from textual.containers import VerticalScroll
 from textual.timer import Timer
 from textual.widgets import Input, Static
 
+from cli.labels import _SUBAGENT_COMMAND_DESCRIPTIONS, _SUBAGENT_LABELS
+
 _SPINNER_FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 
 _COMMANDS = [
-    ("/news_macro", "news & sentiment"),
-    ("/market_data", "financials & metrics"),
-    ("/filings", "10-K SEC analysis"),
+    (f"/{name}", _SUBAGENT_COMMAND_DESCRIPTIONS.get(name, name))
+    for name in _SUBAGENT_LABELS
 ]
 
 

@@ -20,6 +20,12 @@ _SUBAGENT_LABELS: dict[str, str] = {
     "filings": "SEC Filings",
 }
 
+_SUBAGENT_COMMAND_DESCRIPTIONS: dict[str, str] = {
+    "news_macro": "news & sentiment",
+    "market_data": "financials & metrics",
+    "filings": "10-K SEC analysis",
+}
+
 
 def tool_label(name: str) -> str:
     """Return a human-readable label for a tool name.

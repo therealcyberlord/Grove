@@ -1,6 +1,7 @@
 """Slash-command parsing for the Grove TUI - mirrors Claude Code's /command syntax."""
+from cli.labels import _SUBAGENT_LABELS
 
-SUBAGENT_NAMES = ("news_macro", "market_data", "filings")
+SUBAGENT_NAMES = tuple(_SUBAGENT_LABELS.keys())
 
 
 def parse_input(text: str) -> tuple[str | None, str]:
