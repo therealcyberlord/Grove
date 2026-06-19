@@ -30,15 +30,9 @@ def _do_fetch_and_index(ticker: str) -> tuple[str, str]:
 
     set_identity(settings.edgar_identity)
 
-    company = Company(ticker)
-    filing = company.get_filings(form="10-K").latest()
-    if filing is None:
-        raise ValueError(f"No 10-K found for {ticker}")
-
-    period = filing.period_of_report
-    filename = f"{ticker}_10-K_{period}.md"
-
-    # DB-first cache check with staleness guard
+    # DB-first cache check — no EDGAR call until we know we have a cache miss.
+    # Two separate sessions are intentional: the first closes before any blocking
+    # network I/O (EDGAR fetch, S3 upload) so it doesn't hold a DB connection idle.
     with get_db_session() as session:
         db_filing = (
             session.query(Filing)
@@ -65,11 +59,18 @@ def _do_fetch_and_index(ticker: str) -> tuple[str, str]:
                     ticker, db_filing.period, age,
                 )
 
+    company = Company(ticker)
+    filing = company.get_filings(form="10-K").latest()
+    if filing is None:
+        raise ValueError(f"No 10-K found for {ticker}")
+
+    period = filing.period_of_report
+    filename = f"{ticker}_10-K_{period}.md"
+
     logger.info("filings: fetching %s 10-K via EDGAR (period=%s)", ticker, period)
     md_content = filing.markdown()
 
-    from clients.storage import ensure_bucket, upload_filing
-    ensure_bucket()
+    from clients.storage import upload_filing
     s3_key = upload_filing(ticker, filename, md_content)
     period_date = date.fromisoformat(str(period))
     
