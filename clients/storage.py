@@ -27,7 +27,9 @@ def ensure_bucket() -> None:
     bucket = settings.s3_bucket
     try:
         s3.head_bucket(Bucket=bucket)
-    except ClientError:
+    except ClientError as e:
+        if e.response["Error"]["Code"] not in ("404", "NoSuchBucket"):
+            raise
         s3.create_bucket(Bucket=bucket)
         logger.info("storage: created bucket %s", bucket)
 
