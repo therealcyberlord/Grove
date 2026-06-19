@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -13,13 +12,15 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     tavily_api_key: str
     edgar_identity: str
-    langfuse_public_key: str
-    langfuse_secret_key: str
-    langfuse_base_url: str
+    langfuse_public_key: str = ""
+    langfuse_secret_key: str = ""
+    langfuse_base_url: str = ""
+    database_url: str
+    test_database_url: str = ""
+    s3_endpoint_url: str = ""
+    s3_bucket: str = "grove-filings"
+    s3_access_key: str = ""
+    s3_secret_key: str = ""
 
 
 settings = Settings()
-
-os.environ.setdefault("LANGFUSE_PUBLIC_KEY", settings.langfuse_public_key)
-os.environ.setdefault("LANGFUSE_SECRET_KEY", settings.langfuse_secret_key)
-os.environ.setdefault("LANGFUSE_BASE_URL", settings.langfuse_base_url)

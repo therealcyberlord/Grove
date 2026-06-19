@@ -41,7 +41,8 @@ synthesized markdown report with investment thesis and sources
 | Search | Tavily (news, finance, extract) |
 | Market data | yfinance |
 | SEC filings | edgartools + PageIndex |
-| Observability | Langfuse |
+| Storage | PostgreSQL (filing metadata + index), S3/MinIO (filing markdown content) |
+| Observability | Langfuse (optional) |
 | Runtime | Python 3.12+, uv |
 
 ## Setup
@@ -60,39 +61,82 @@ uv sync
 git clone https://github.com/VectifyAI/PageIndex lib/PageIndex
 ```
 
-**3. Configure environment variables.** Create a `.env` in the project root:
+**3. Start PostgreSQL and create databases**
+
+```bash
+# Create app database and test database
+createdb grovedb
+createdb grovedb_test
+psql -d grovedb -c "GRANT ALL ON SCHEMA public TO <your_user>;"
+psql -d grovedb_test -c "GRANT ALL ON SCHEMA public TO <your_user>;"
+```
+
+**4. Start S3-compatible object storage** (MinIO for local dev)
+
+```bash
+brew install minio/stable/minio
+MINIO_ROOT_USER=<minio_user> MINIO_ROOT_PASSWORD=<minio_password> \
+  minio server ~/minio-data --address ":9000" --console-address ":9001" &
+```
+
+Whatever you choose here must match `S3_ACCESS_KEY` / `S3_SECRET_KEY` in your `.env` (step 5).
+
+MinIO console: `http://localhost:9001`
+
+**5. Configure environment variables.** Create a `.env` in the project root:
 
 ```
 OPENROUTER_API_KEY=         # Required: DeepSeek and Gemini via OpenRouter
 TAVILY_API_KEY=             # Required: all search tools
-LANGFUSE_PUBLIC_KEY=        # Required: observability
-LANGFUSE_SECRET_KEY=        # Required: observability
-LANGFUSE_BASE_URL=          # Required: e.g. https://us.cloud.langfuse.com
-ANTHROPIC_API_KEY=          # Optional: Claude API (not used by default agents)
 EDGAR_IDENTITY=             # Required: SEC EDGAR User-Agent
+DATABASE_URL=               # Required: e.g. postgresql://<user>:<password>@localhost:5432/grovedb
+TEST_DATABASE_URL=          # Required for tests: e.g. postgresql://<user>:<password>@localhost:5432/grovedb_test
+S3_ENDPOINT_URL=            # Local MinIO: http://localhost:9000 (omit for AWS S3)
+S3_BUCKET=                  # e.g. grove-filings
+S3_ACCESS_KEY=              # Must match MINIO_ROOT_USER
+S3_SECRET_KEY=              # Must match MINIO_ROOT_PASSWORD
+ANTHROPIC_API_KEY=          # Optional: Claude API (not used by default agents)
+LANGFUSE_PUBLIC_KEY=        # Optional: observability
+LANGFUSE_SECRET_KEY=        # Optional: observability
+LANGFUSE_BASE_URL=          # Optional: e.g. https://us.cloud.langfuse.com
+```
+
+**6. Seed the database** (one-time, migrates any existing `documents/` and `workspace/` data)
+
+```bash
+PYTHONPATH=. uv run python scripts/seed_db.py
 ```
 
 ## Running
 
+MinIO isn't a persistent service - start it before running anything that touches filings or storage (data persists in `~/minio-data` between restarts). Use the same `<minio_user>` / `<minio_password>` you set up in step 4:
+
+```bash
+MINIO_ROOT_USER=<minio_user> MINIO_ROOT_PASSWORD=<minio_password> \
+  minio server ~/minio-data --address ":9000" --console-address ":9001" &
+```
+
 ```bash
 # Full orchestrator (routes automatically based on query)
-uv run python -m examples.test_orchestrator
+PYTHONPATH=. uv run python examples/test_orchestrator.py
 
 # Individual subagents
-uv run python -m examples.test_news_macro
-uv run python -m examples.test_market_data
-uv run python -m examples.test_filings
+PYTHONPATH=. uv run python examples/test_news_macro.py
+PYTHONPATH=. uv run python examples/test_market_data.py
+PYTHONPATH=. uv run python examples/test_filings.py
 ```
 
 ## Testing
 
 Grove has two layers of testing:
 
-**Unit tests** cover the deterministic scorer functions with no API keys or external services needed:
+**Unit + integration tests** run against a dedicated PostgreSQL test database (`TEST_DATABASE_URL`). Each test is wrapped in a transaction that rolls back on teardown — no data persists between tests.
 
 ```bash
 PYTHONPATH=. uv run pytest tests/ -v
 ```
+
+See [tests/README.md](tests/README.md) for fixture details and database setup.
 
 **Eval harness** provides two Langfuse-backed suites that run the live agents and score output quality:
 - Orchestrator suite (`grove-orchestrator-v1`): 21 end-to-end cases across 5 routing types, scored for routing accuracy and citation integrity

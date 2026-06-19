@@ -7,6 +7,8 @@
 - **LLM**: DeepSeek V4 Pro via OpenRouter (`build_openrouter_client()`); `google/gemini-3.1-flash-lite-preview` via OpenRouter for Tavily extract summarization and LLM-as-judge scoring
 - **Orchestration**: DeepAgents (`deepagents`) - orchestrator-subagent pattern
 - **Tools**: LangChain `@tool` decorators, async-first, blocking libs run in executor
+- **Database**: PostgreSQL via SQLAlchemy 2.x (`psycopg2-binary`) - filing metadata and PageIndex records
+- **Object storage**: S3-compatible (`boto3`) - filing markdown content; MinIO for local dev, AWS S3 for production
 - **Package manager**: `uv` - use `uv run` or `uv add`, not pip
 - **Python**: 3.12+
 
@@ -40,8 +42,10 @@ clients/
   config.py                    # Settings (pydantic-settings) - central env var config
   llm.py                       # build_claude_client() and build_openrouter_client() factories
   tavily.py                    # get_tavily_client() singleton
-  langfuse.py                  # get_langfuse_client() singleton - required, raises if not configured
-  pageindex.py                 # get_pageindex_client() - wraps local lib/PageIndex
+  langfuse.py                  # get_langfuse_client() / get_langfuse_callback() - optional, returns None if unconfigured
+  pageindex.py                 # get_pageindex_client() - DBBackedPageIndexClient wrapping lib/PageIndex
+  database.py                  # get_db_session() context manager, init_db() - SQLAlchemy + PostgreSQL
+  storage.py                   # get_s3_client(), upload_filing(), download_filing(), upload_structure(), download_structure(), ensure_bucket() - S3/MinIO
 evals/
   experiments.py               # Langfuse experiment runner (orchestrator + subagent experiments)
   dataset.py                   # EvalCase + SubagentEvalCase definitions; eval_dataset + subagent_eval_dataset
@@ -50,19 +54,28 @@ evals/
     structure.py               # score_structure - required/forbidden section header checks (unit tests only)
     urls.py                    # score_no_fabricated_urls - all report URLs must come from tool results
     llm_judge.py               # score_helpfulness + score_subagent_quality (Gemini Flash Lite judge)
+models/
+  db.py                        # Filing + PageIndexRecord ORM models (SQLAlchemy 2.x mapped_column)
+scripts/
+  seed_db.py                   # One-time migration: seeds PostgreSQL + S3 from documents/ and workspace/
 tests/
   scorers/                     # Unit tests for deterministic scorers (no API keys needed)
     test_routing.py
     test_structure.py
     test_urls.py
+  db/                          # Integration tests for DB/S3 persistence (requires PostgreSQL)
+    conftest.py                # db_engine (session-scoped), db_session (transaction rollback), patch_db
+    test_filings_agent.py      # _do_fetch_and_index cache hit/stale/persist tests
+    test_pageindex_client.py   # DBBackedPageIndexClient persist/hydrate tests
+    test_seed.py               # seed_db seeding logic tests
 lib/
   PageIndex/                   # PageIndex local library (not a pip package)
 schemas/
   agents.py                    # AgentRunRequest Pydantic model
-documents/                     # 10-K markdown files fetched from EDGAR (auto-created)
-workspace/                     # PageIndex index storage (auto-created)
+documents/                     # Legacy: 10-K markdown files (source for seed_db.py; new filings use temp files)
+workspace/                     # Legacy: PageIndex workspace (source for seed_db.py; new indexes stored in DB)
 examples/                      # Manual run scripts for subagents and orchestrator
-main.py                        # Stub entry point
+main.py                        # Entry point - initializes DB schema and S3 bucket on startup
 ```
 
 Each subagent folder has the same layout:
@@ -145,7 +158,13 @@ Tools return a `dict` with an `"error": str | None` key where failure is possibl
 
 ### Filings workflow
 
-The filings subagent uses EDGAR + PageIndex for 10-K analysis. `fetch_and_index_filing(ticker)` must be called first - it fetches the latest 10-K via `edgartools`, converts it to markdown, saves it to `documents/`, and indexes it with PageIndex. Returns a `doc_id` and `period`. Subsequent calls for the same ticker hit a filename-based cache in the PageIndex client.
+The filings subagent uses EDGAR + PageIndex for 10-K analysis. `fetch_and_index_filing(ticker)` must be called first. Flow:
+1. **DB cache check** - queries `filings` table for a fresh record (age <= 365 days). Cache hit returns immediately without touching EDGAR.
+2. **EDGAR fetch** - on cache miss, fetches the latest 10-K via `edgartools` and converts to markdown.
+3. **S3 upload** - markdown content is uploaded to S3 (`filings/{ticker}/{doc_name}.md`); `content_s3_key` is stored in `filings` table.
+4. **Indexing** - writes markdown to a temp file, calls `client.index(tmp_path)`, then deletes the temp file. `DBBackedPageIndexClient` uploads the structure JSON to S3 (`indexes/{doc_id}.json`) and persists the record to `page_indexes` with `structure_s3_key` pointing to that object.
+
+`documents/` and `workspace/` are no longer written to by new filings. They exist as legacy sources for `seed_db.py`.
 
 ### Shared clients
 
@@ -153,20 +172,28 @@ All singletons live in `clients/`:
 - Tavily: `from clients.tavily import get_tavily_client`
 - LLM: `from clients.llm import build_openrouter_client, build_claude_client`
 - PageIndex: `from clients.pageindex import get_pageindex_client`
-- Langfuse: `from clients.langfuse import get_langfuse_client`
+- Langfuse: `from clients.langfuse import get_langfuse_client, get_langfuse_callback`
+- Database: `from clients.database import get_db_session, init_db`
+- Storage: `from clients.storage import upload_filing, download_filing, upload_structure, download_structure, ensure_bucket`
 
 Do not instantiate these directly in tool or agent files.
 
 ## Environment Variables
 
 ```
-OPENROUTER_API_KEY         # Primary LLM (DeepSeek, Gemini via OpenRouter)
-ANTHROPIC_API_KEY          # Claude API (build_claude_client - not used by default agents)
-TAVILY_API_KEY             # All Tavily search tools
-EDGAR_IDENTITY             # SEC EDGAR User-Agent
-LANGFUSE_PUBLIC_KEY        # Observability - required; wired per-call via LangfuseCallbackHandler
-LANGFUSE_SECRET_KEY        # Observability - required
-LANGFUSE_BASE_URL          # Observability - required
+OPENROUTER_API_KEY         # Required: primary LLM (DeepSeek, Gemini via OpenRouter)
+TAVILY_API_KEY             # Required: all Tavily search tools
+EDGAR_IDENTITY             # Required: SEC EDGAR User-Agent
+DATABASE_URL               # Required: PostgreSQL connection string for app data
+TEST_DATABASE_URL          # Required for tests: separate PostgreSQL DB (e.g. grovedb_test)
+S3_ENDPOINT_URL            # Optional: set for MinIO/local S3; omit for AWS S3
+S3_BUCKET                  # S3 bucket name (default: grove-filings)
+S3_ACCESS_KEY              # S3/MinIO access key
+S3_SECRET_KEY              # S3/MinIO secret key
+ANTHROPIC_API_KEY          # Optional: Claude API (build_claude_client - not used by default agents)
+LANGFUSE_PUBLIC_KEY        # Optional: observability tracing (app runs without it)
+LANGFUSE_SECRET_KEY        # Optional: observability tracing
+LANGFUSE_BASE_URL          # Optional: observability tracing
 ```
 
 ## Key Conventions
@@ -191,9 +218,10 @@ LANGFUSE_BASE_URL          # Observability - required
 
 ## Known Issues / Watch-outs
 
-- The PageIndex client cache (via `lru_cache`) is process-scoped. Concurrent requests for the same ticker during indexing could race. Acceptable for single-run usage; needs a lock or external cache for server deployment.
+- The PageIndex client cache (via `lru_cache`) is process-scoped, and the `filings`/`page_indexes` DB cache check in `_do_fetch_and_index` has the same shape - concurrent first-time requests for the same ticker can both pass the cache-miss check and race on inserting the `Filing` row (one succeeds, the other raises `IntegrityError` on the unique `(ticker, form_type, period)` constraint and retries from scratch on its next call). Acceptable for single-run usage; needs a lock or external cache for server deployment.
 - `yfinance` label matching for FCF, ROE, and ROA derivation uses string matching against DataFrame index labels - may break if yfinance changes its schema.
 - `tavily_general_search` is defined but not currently wired to any subagent. Available for future use.
+- MinIO (local S3) data lives in `~/minio-data`. Start with `MINIO_ROOT_USER=<minio_user> MINIO_ROOT_PASSWORD=<minio_password> minio server ~/minio-data --address ":9000" --console-address ":9001"` (must match `S3_ACCESS_KEY`/`S3_SECRET_KEY`). Not auto-started on boot unless configured as a service.
 
 ## Evaluation
 

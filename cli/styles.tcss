@@ -1,0 +1,60 @@
+Screen {
+    background: #111c14;
+    color: #c8e6c9;
+}
+
+#app-header {
+    background: #1b2e1e;
+    height: 2;
+    dock: top;
+    padding: 0 1;
+    color: #c8e6c9;
+    border-bottom: solid #388e3c;
+}
+
+Footer {
+    background: #1b2e1e;
+    color: #6a9f6a;
+}
+
+#body {
+    height: 1fr;
+}
+
+#sidebar {
+    width: 28;
+    background: #1b2e1e;
+    border-right: tall #388e3c;
+    padding: 0 1;
+}
+
+#report-scroll {
+    width: 1fr;
+    padding: 0 1;
+}
+
+#command-suggestions {
+    background: #1b2e1e;
+    border: solid #388e3c;
+    padding: 0 1;
+    height: auto;
+}
+
+#prompt {
+    background: #0d150f;
+    border-top: tall #388e3c;
+    color: #c8e6c9;
+}
+
+.nested {
+    color: #6a9f6a;
+    padding-left: 2;
+}
+
+.ready-heading {
+    color: #6a9f6a;
+}
+
+.ready-item {
+    color: #81c784;
+}

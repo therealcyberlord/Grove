@@ -3,15 +3,16 @@ import asyncio
 import logging
 
 from agents.orchestrator import orchestrator
-from langfuse.langchain import CallbackHandler as LangfuseCallbackHandler
+from clients.langfuse import get_langfuse_callback
 
 logging.basicConfig(level=logging.INFO, format="%(name)s %(levelname)s %(message)s")
 
-query = "What is the sentiment of Celsius?"
+query = "Give me an in-depth analysis of META"
 
 async def main():
     print(f"Query: {query}\n{'='*60}\n")
-    result = await orchestrator.with_config({"callbacks": [LangfuseCallbackHandler()]}).ainvoke(
+    callbacks = [cb for cb in [get_langfuse_callback()] if cb is not None]
+    result = await orchestrator.with_config({"callbacks": callbacks}).ainvoke(
         {"messages": [{"role": "user", "content": query}]}
     )
     messages = result.get("messages", [])
