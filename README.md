@@ -1,6 +1,6 @@
 # Grove
 
-<img src="Grove.png" width="280" alt="Grove" />
+<img src="assets/Grove.png" width="280" alt="Grove" />
 
 <sub>Image generated using Google Gemini Nano Banana</sub>
 
@@ -118,9 +118,11 @@ MINIO_ROOT_USER=<minio_user> MINIO_ROOT_PASSWORD=<minio_password> \
   minio server ~/minio-data --address ":9000" --console-address ":9001" &
 ```
 
-### TUI (recommended)
+### TUI (recommended) Inspired by Claude Code
 
 Grove ships a split-panel terminal app: an activity sidebar showing live subagent and tool progress on the left, and the streaming report on the right.
+
+<img src="assets/grove-tui.png" width="350" alt="Grove" />
 
 **Terminal 1 — start the API server:**
 
